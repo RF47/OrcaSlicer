@@ -2683,7 +2683,7 @@ void PrintConfigDef::init_fff_params()
     def->max = 2;
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionFloats { 0.02 });
-    
+
     // Orca: Adaptive pressure advance option and calibration values
     def = this->add("adaptive_pressure_advance", coBools);
     def->label = L("Enable adaptive pressure advance (beta)");
@@ -5485,6 +5485,13 @@ void PrintConfigDef::init_fff_params()
     def = this->add("reduce_infill_retraction", coBool);
     def->label = L("Reduce infill retraction");
     def->tooltip = L("Don\'t retract when the travel is entirely within an infill area. That means the oozing can\'t been seen. This can reduce times of retraction for complex model and save printing time, but make slicing and G-code generating slower. Note that Z-hop is also not performed in areas where retraction is skipped.");
+    def->mode = comAdvanced;
+    def->set_default_value(new ConfigOptionBool(false));
+
+    def = this->add("disable_infill_pressure_advance", coBool);
+    def->label = L("Disable infill pressure advance");
+    def->tooltip = L("Disable pressure advance / Linear advance for sparse infill to avoid unnecessary extruder movements."
+                     "Ignored if adaptive pressure advance is enabled");
     def->mode = comAdvanced;
     def->set_default_value(new ConfigOptionBool(false));
 
