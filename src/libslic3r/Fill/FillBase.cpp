@@ -19,6 +19,7 @@
 #include "FillGyroid.hpp"
 #include "FillTpmsD.hpp"
 #include "FillTpmsFK.hpp"
+#include "FillRhodo.hpp"
 #include "FillPlanePath.hpp"
 #include "FillLine.hpp"
 #include "FillRectilinear.hpp"
@@ -43,6 +44,7 @@ Fill* Fill::new_from_type(const InfillPattern type)
     case ipHoneycomb:           return new FillHoneycomb();
     case ipLateralHoneycomb:         return new FillLateralHoneycomb();
     case ip3DHoneycomb:         return new Fill3DHoneycomb();
+    case ipRhodo:               return new FillRhodo();
     case ipGyroid:              return new FillGyroid();
     case ipTpmsD:               return new FillTpmsD();//from creality print
     case ipTpmsFK:              return new FillTpmsFK();

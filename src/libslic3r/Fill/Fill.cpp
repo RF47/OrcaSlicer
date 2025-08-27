@@ -16,6 +16,7 @@
 #include "FillConcentricInternal.hpp"
 #include "FillTpmsD.hpp"
 #include "FillTpmsFK.hpp"
+#include "FillRhodo.hpp"
 #include "FillConcentric.hpp"
 #include "libslic3r.h"
 
@@ -1329,6 +1330,7 @@ Polylines Layer::generate_sparse_infill_polylines_for_anchoring(FillAdaptive::Oc
         case ipHoneycomb:
         case ipLateralHoneycomb:
         case ip3DHoneycomb:
+        case ipRhodo:
         case ipGyroid:
         case ipTpmsD:
         case ipTpmsFK:

@@ -88,6 +88,8 @@ set(lisbslic3r_sources
     Fill/Fill.hpp
     Fill/Fill3DHoneycomb.cpp
     Fill/Fill3DHoneycomb.hpp
+    Fill/FillRhodo.cpp
+    Fill/FillRhodo.hpp
     Fill/FillAdaptive.cpp
     Fill/FillAdaptive.hpp
     Fill/FillBase.cpp

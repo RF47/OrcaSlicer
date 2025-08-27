@@ -161,6 +161,7 @@ static t_config_enum_values s_keys_map_InfillPattern {
     { "lightning", ipLightning },
     { "honeycomb", ipHoneycomb },
     { "3dhoneycomb", ip3DHoneycomb },
+    { "rhodo", ipRhodo },
     { "lateral-honeycomb", ipLateralHoneycomb },
     { "lateral-lattice", ipLateralLattice },
     { "crosshatch", ipCrossHatch },
@@ -2414,6 +2415,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_values.push_back("lightning");
     def->enum_values.push_back("honeycomb");
     def->enum_values.push_back("3dhoneycomb");
+    def->enum_values.push_back("rhodo");
     def->enum_values.push_back("lateral-honeycomb");
     def->enum_values.push_back("lateral-lattice");
     def->enum_values.push_back("crosshatch");
@@ -2440,6 +2442,7 @@ void PrintConfigDef::init_fff_params()
     def->enum_labels.push_back(L("Lightning"));
     def->enum_labels.push_back(L("Honeycomb"));
     def->enum_labels.push_back(L("3D Honeycomb"));
+    def->enum_labels.push_back(L("Rhodo"));
     def->enum_labels.push_back(L("Lateral Honeycomb"));
     def->enum_labels.push_back(L("Lateral Lattice"));
     def->enum_labels.push_back(L("Cross Hatch"));
