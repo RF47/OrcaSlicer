@@ -925,6 +925,9 @@ void ConfigManipulation::toggle_print_fff_options(DynamicPrintConfig *config, in
     bool have_raft = config->opt_int("raft_layers") > 0;
     bool have_support_material = config->opt_bool("enable_support") || have_raft;
 
+    // Hide raft expansion when raft is not enabled
+    toggle_line("raft_expansion", have_raft);
+
     SupportType support_type = config->opt_enum<SupportType>("support_type");
     bool have_support_interface = config->opt_int("support_interface_top_layers") > 0 || config->opt_int("support_interface_bottom_layers") > 0;
     bool have_support_soluble = have_support_material && config->opt_float("support_top_z_distance") == 0;
