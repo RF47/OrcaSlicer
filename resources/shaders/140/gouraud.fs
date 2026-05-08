@@ -168,18 +168,8 @@ void main()
 	color.rgb = (any(lessThan(pv_check_min, ZERO)) || any(greaterThan(pv_check_max, ZERO))) ? mix(color.rgb, ZERO, 0.3333) : color.rgb;
 
     //BBS: add outline_color
-    if (is_outline) {
-        color = vec4(vec3(intensity.y) + color.rgb * intensity.x, color.a);
-        vec2 fragCoord = gl_FragCoord.xy;
-        float s = DetectSilho(fragCoord);
-        // Makes silhouettes thicker.
-        for(int i=1;i<=INFLATE; i++)
-        {
-           s = max(s, DetectSilho(fragCoord.xy + vec2(i, 0)));
-           s = max(s, DetectSilho(fragCoord.xy + vec2(0, i)));
-        }   
-        out_color = vec4(mix(color.rgb, getBackfaceColor(color.rgb), s), color.a);
-    }
+    if (is_outline)
+        out_color = vec4(1.0, 1.0, 1.0, color.a);
 #ifdef ENABLE_ENVIRONMENT_MAP
     else if (use_environment_tex)
         out_color = vec4(0.45 * texture(environment_tex, normalize(eye_normal).xy * 0.5 + 0.5).xyz + 0.8 * color.rgb * intensity.x, color.a);
