@@ -703,8 +703,9 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
         } else {
             // Start from a non-clipped junction so wrapped clipped segments do
             // not need an artificial reconnection across the seam.
-            const auto first_non_clipped = std::find_if(splitted.begin(), splitted.end(),
-                                                        [](const Algorithm::SplitLineJunction& j) { return !j.clipped; });
+            const auto first_non_clipped = std::find_if(splitted.begin(), splitted.end(), [](const Algorithm::SplitLineJunction& j) {
+                return !j.clipped;
+            });
             if (first_non_clipped != splitted.begin()) {
                 std::rotate(splitted.begin(), first_non_clipped, splitted.end());
             }
