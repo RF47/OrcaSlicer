@@ -564,7 +564,7 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
 
     const auto  slice_z = perimeter_generator.slice_z;
     const auto& regions = perimeter_generator.regions_by_fuzzify;
-    const bool Is_bridge = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    const bool has_lower_slices = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
     if (regions.size() == 1) { // optimization
         const auto& config  = regions.begin()->first;
         const bool  fuzzify = should_fuzzify(config, perimeter_generator.layer_id, loop_idx, is_contour);
@@ -572,7 +572,7 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
             return polygon;
         }
 
-        if (!Is_bridge) {
+        if (!has_lower_slices) {
             fuzzified = polygon;
             fuzzy_polyline(fuzzified.points, true, slice_z, config);
             return fuzzified;
@@ -639,7 +639,7 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
     // Fast path: single merged region — apply directly without splitting
     if (merged_regions.size() == 1) {
         const auto& mr = merged_regions.front();
-        if (mr.expolygons.empty() && !Is_bridge) {
+        if (mr.expolygons.empty() && !has_lower_slices) {
             fuzzified = polygon;
             fuzzy_polyline(fuzzified.points, true, slice_z, *mr.config);
             return fuzzified;
@@ -679,7 +679,7 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
     fuzzified = polygon;
     for (const auto& r : merged_regions) {
         ExPolygons fuzzy_clip = r.expolygons;
-        if (Is_bridge) {
+        if (has_lower_slices) {
             if (fuzzy_clip.empty()) {
                 fuzzy_clip = *perimeter_generator.lower_slices;
             } else {
@@ -748,14 +748,14 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
 {
     const auto  slice_z = perimeter_generator.slice_z;
     const auto& regions = perimeter_generator.regions_by_fuzzify;
-    const bool Is_bridge = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    const bool has_lower_slices = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
     if (regions.size() == 1) { // optimization
         const auto& config = regions.begin()->first;
         const bool fuzzify = should_fuzzify(config, perimeter_generator.layer_id, extrusion->inset_idx, is_contour);
         if (!fuzzify)
             return;
 
-        if (!Is_bridge) { //first layer
+        if (!has_lower_slices) { // no lower slices available — fuzzify the whole loop
             fuzzy_extrusion_line(extrusion->junctions, slice_z, config);
             return;
         }
@@ -828,7 +828,7 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
         if (!merged_regions.empty()) {
 
             // Fast path: single merged region — apply directly without splitting
-            if (merged_regions.size() == 1 && merged_regions.front().expolygons.empty() && !Is_bridge) {
+            if (merged_regions.size() == 1 && merged_regions.front().expolygons.empty() && !has_lower_slices) {
                 fuzzy_extrusion_line(extrusion->junctions, slice_z, *merged_regions.front().config);
                 return;
             }
@@ -872,7 +872,7 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
             // Split the loops into lines with different config, and fuzzy them separately
             for (const auto& r : merged_regions) {
                 ExPolygons fuzzy_clip = r.expolygons;
-                if (Is_bridge) {
+                if (has_lower_slices) {
                     if (fuzzy_clip.empty()) {
                         fuzzy_clip = *perimeter_generator.lower_slices;
                     } else {
