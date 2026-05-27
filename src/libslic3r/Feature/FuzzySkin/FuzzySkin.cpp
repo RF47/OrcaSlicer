@@ -564,16 +564,66 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
 
     const auto  slice_z = perimeter_generator.slice_z;
     const auto& regions = perimeter_generator.regions_by_fuzzify;
-    const bool  has_lower_slices = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
-    if (regions.size() == 1 && !has_lower_slices) { // optimization
+    const bool Is_bridge = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    if (regions.size() == 1) { // optimization
         const auto& config  = regions.begin()->first;
         const bool  fuzzify = should_fuzzify(config, perimeter_generator.layer_id, loop_idx, is_contour);
         if (!fuzzify) {
             return polygon;
         }
 
-        fuzzified = polygon;
-        fuzzy_polyline(fuzzified.points, true, slice_z, config);
+        if (!Is_bridge) {
+            fuzzified = polygon;
+            fuzzy_polyline(fuzzified.points, true, slice_z, config);
+            return fuzzified;
+        }
+
+        auto splitted = Algorithm::split_line(polygon, *perimeter_generator.lower_slices, true);
+        if (splitted.empty()) {
+            return polygon;
+        }
+
+        if (std::all_of(splitted.begin(), splitted.end(), [](const Algorithm::SplitLineJunction& j) { return j.clipped; })) {
+            fuzzified = polygon;
+            fuzzy_polyline(fuzzified.points, true, slice_z, config);
+            return fuzzified;
+        }
+
+        const auto first_non_clipped = std::find_if(splitted.begin(), splitted.end(), [](const Algorithm::SplitLineJunction& j) {
+            return !j.clipped;
+        });
+        if (first_non_clipped != splitted.begin()) {
+            std::rotate(splitted.begin(), first_non_clipped, splitted.end());
+        }
+        Points segment;
+        segment.reserve(splitted.size());
+        fuzzified.points.clear();
+
+        const auto fuzzy_current_segment = [&segment, &fuzzified, &config, slice_z]() {
+            fuzzified.points.push_back(segment.front());
+            const auto back = segment.back();
+            fuzzy_polyline(segment, false, slice_z, config);
+            fuzzified.points.insert(fuzzified.points.end(), segment.begin(), segment.end());
+            fuzzified.points.push_back(back);
+            segment.clear();
+        };
+
+        for (const auto& p : splitted) {
+            if (p.clipped) {
+                segment.push_back(p.p);
+            } else {
+                if (segment.empty()) {
+                    fuzzified.points.push_back(p.p);
+                } else {
+                    segment.push_back(p.p);
+                    fuzzy_current_segment();
+                }
+            }
+        }
+        if (!segment.empty()) {
+            segment.push_back(splitted.front().p);
+            fuzzy_current_segment();
+        }
         return fuzzified;
     }
 
@@ -589,7 +639,7 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
     // Fast path: single merged region — apply directly without splitting
     if (merged_regions.size() == 1) {
         const auto& mr = merged_regions.front();
-        if (mr.expolygons.empty() && !has_lower_slices) {
+        if (mr.expolygons.empty() && !Is_bridge) {
             fuzzified = polygon;
             fuzzy_polyline(fuzzified.points, true, slice_z, *mr.config);
             return fuzzified;
@@ -629,7 +679,7 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
     fuzzified = polygon;
     for (const auto& r : merged_regions) {
         ExPolygons fuzzy_clip = r.expolygons;
-        if (has_lower_slices) {
+        if (Is_bridge) {
             if (fuzzy_clip.empty()) {
                 fuzzy_clip = *perimeter_generator.lower_slices;
             } else {
@@ -653,9 +703,8 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
         } else {
             // Start from a non-clipped junction so wrapped clipped segments do
             // not need an artificial reconnection across the seam.
-            const auto first_non_clipped = std::find_if(splitted.begin(), splitted.end(), [](const Algorithm::SplitLineJunction& j) {
-                return !j.clipped;
-            });
+            const auto first_non_clipped = std::find_if(splitted.begin(), splitted.end(),
+                                                        [](const Algorithm::SplitLineJunction& j) { return !j.clipped; });
             if (first_non_clipped != splitted.begin()) {
                 std::rotate(splitted.begin(), first_non_clipped, splitted.end());
             }
@@ -699,12 +748,77 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
 {
     const auto  slice_z = perimeter_generator.slice_z;
     const auto& regions = perimeter_generator.regions_by_fuzzify;
-    const bool  has_lower_slices = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
-    if (regions.size() == 1 && !has_lower_slices) { // optimization
-        const auto& config  = regions.begin()->first;
-        const bool  fuzzify = should_fuzzify(config, perimeter_generator.layer_id, extrusion->inset_idx, is_contour);
-        if (fuzzify)
+    const bool Is_bridge = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    if (regions.size() == 1) { // optimization
+        const auto& config = regions.begin()->first;
+        const bool fuzzify = should_fuzzify(config, perimeter_generator.layer_id, extrusion->inset_idx, is_contour);
+        if (!fuzzify)
+            return;
+
+        if (!Is_bridge) { //first layer
             fuzzy_extrusion_line(extrusion->junctions, slice_z, config);
+            return;
+        }
+
+        const auto splitted = Algorithm::split_line(*extrusion, *perimeter_generator.lower_slices, false);
+        if (splitted.empty()) {
+            return;
+        }
+
+        if (std::all_of(splitted.begin(), splitted.end(), [](const Algorithm::SplitLineJunction& j) { return j.clipped; })) {
+            fuzzy_extrusion_line(extrusion->junctions, slice_z, config);
+            return;
+        }
+
+        const auto current_ext = extrusion->junctions;
+        std::vector<Arachne::ExtrusionJunction> segment;
+        segment.reserve(current_ext.size());
+        extrusion->junctions.clear();
+
+        const auto fuzzy_current_segment = [&segment, &extrusion, &config, slice_z]() {
+            const auto front = segment.front();
+            const auto back  = segment.back();
+
+            fuzzy_extrusion_line(segment, slice_z, config, false);
+            if (!extrusion->junctions.empty() && extrusion->junctions.front().p != front.p) {
+                extrusion->junctions.push_back(front);
+            }
+            extrusion->junctions.insert(extrusion->junctions.end(), segment.begin(), segment.end());
+            if (!extrusion->junctions.empty() && extrusion->junctions.back().p != front.p) {
+                extrusion->junctions.push_back(back);
+            }
+            segment.clear();
+        };
+
+        const auto to_ex_junction = [&current_ext](const Algorithm::SplitLineJunction& j) -> Arachne::ExtrusionJunction {
+            Arachne::ExtrusionJunction res = current_ext[j.get_src_index()];
+            if (!j.is_src()) {
+                res.p = j.p;
+            }
+            return res;
+        };
+
+        for (const auto& p : splitted) {
+            if (p.clipped) {
+                segment.push_back(to_ex_junction(p));
+            } else {
+                if (segment.empty()) {
+                    extrusion->junctions.push_back(to_ex_junction(p));
+                } else {
+                    segment.push_back(to_ex_junction(p));
+                    fuzzy_current_segment();
+                }
+            }
+        }
+        if (!segment.empty()) {
+            fuzzy_current_segment();
+        }
+
+        if (!extrusion->junctions.empty() && extrusion->junctions.front().p != extrusion->junctions.back().p) {
+            extrusion->junctions.back().p = extrusion->junctions.front().p;
+            extrusion->junctions.back().w = extrusion->junctions.front().w;
+        }
+        return;
     } else {
         // Merge regions that produce identical fuzzy effects (differ only in type).
         // When the style (e.g. External) and a painted region (All) both fuzzify this loop
@@ -714,7 +828,7 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
         if (!merged_regions.empty()) {
 
             // Fast path: single merged region — apply directly without splitting
-            if (merged_regions.size() == 1 && merged_regions.front().expolygons.empty() && !has_lower_slices) {
+            if (merged_regions.size() == 1 && merged_regions.front().expolygons.empty() && !Is_bridge) {
                 fuzzy_extrusion_line(extrusion->junctions, slice_z, *merged_regions.front().config);
                 return;
             }
@@ -747,95 +861,96 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
             }
 #endif
 
-        // Make each region's ExPolygons exclusive so overlapping regions don't double-fuzz
-        // the same perimeter section. Later regions in the list take priority over earlier ones
-        // in overlapping areas.
-        for (size_t i = 0; i < merged_regions.size(); ++i)
-            for (size_t j = i + 1; j < merged_regions.size(); ++j)
-                if (!merged_regions[i].expolygons.empty() && !merged_regions[j].expolygons.empty())
-                    merged_regions[i].expolygons = diff_ex(merged_regions[i].expolygons, merged_regions[j].expolygons);
+            // Make each region's ExPolygons exclusive so overlapping regions don't double-fuzz
+            // the same perimeter section. Later regions in the list take priority over earlier ones
+            // in overlapping areas.
+            for (size_t i = 0; i < merged_regions.size(); ++i)
+                for (size_t j = i + 1; j < merged_regions.size(); ++j)
+                    if (!merged_regions[i].expolygons.empty() && !merged_regions[j].expolygons.empty())
+                        merged_regions[i].expolygons = diff_ex(merged_regions[i].expolygons, merged_regions[j].expolygons);
 
-        // Split the loops into lines with different config, and fuzzy them separately
-        for (const auto& r : merged_regions) {
-            ExPolygons fuzzy_clip = r.expolygons;
-            if (has_lower_slices) {
-                if (fuzzy_clip.empty()) {
-                    fuzzy_clip = *perimeter_generator.lower_slices;
-                } else {
-                    fuzzy_clip = intersection_ex(fuzzy_clip, *perimeter_generator.lower_slices, ApplySafetyOffset::Yes);
-                }
-            }
-            if (fuzzy_clip.empty()) {
-                continue;
-            }
-
-            const auto splitted = Algorithm::split_line(*extrusion, fuzzy_clip, false);
-            if (splitted.empty()) {
-                // No intersection, skip
-                continue;
-            }
-
-            // Fuzzy splitted extrusion
-            if (std::all_of(splitted.begin(), splitted.end(), [](const Algorithm::SplitLineJunction& j) { return j.clipped; })) {
-                // The entire polygon is fuzzified
-                fuzzy_extrusion_line(extrusion->junctions, slice_z, *r.config);
-                continue;
-            } else {
-                const auto                              current_ext = extrusion->junctions;
-                std::vector<Arachne::ExtrusionJunction> segment;
-                segment.reserve(current_ext.size());
-                extrusion->junctions.clear();
-
-                const auto fuzzy_current_segment = [&segment, &extrusion, &r, slice_z]() {
-                    // Orca: non fuzzy points to isolate fuzzy region
-                    const auto front = segment.front();
-                    const auto back  = segment.back();
-
-                    fuzzy_extrusion_line(segment, slice_z, *r.config, false);
-                    // Orca: only add non fuzzy point if it's not in the extrusion closing point.
-                    if (!extrusion->junctions.empty() && extrusion->junctions.front().p != front.p) {
-                        extrusion->junctions.push_back(front);
-                    }
-                    extrusion->junctions.insert(extrusion->junctions.end(), segment.begin(), segment.end());
-                    // Orca: only add non fuzzy point if it's not in the extrusion closing point.
-                    if (!extrusion->junctions.empty() && extrusion->junctions.back().p != front.p) {
-                        extrusion->junctions.push_back(back);
-                    }
-                    segment.clear();
-                };
-
-                const auto to_ex_junction = [&current_ext](const Algorithm::SplitLineJunction& j) -> Arachne::ExtrusionJunction {
-                    Arachne::ExtrusionJunction res = current_ext[j.get_src_index()];
-                    if (!j.is_src()) {
-                        res.p = j.p;
-                    }
-                    return res;
-                };
-
-                for (const auto& p : splitted) {
-                    if (p.clipped) {
-                        segment.push_back(to_ex_junction(p));
+            // Split the loops into lines with different config, and fuzzy them separately
+            for (const auto& r : merged_regions) {
+                ExPolygons fuzzy_clip = r.expolygons;
+                if (Is_bridge) {
+                    if (fuzzy_clip.empty()) {
+                        fuzzy_clip = *perimeter_generator.lower_slices;
                     } else {
-                        if (segment.empty()) {
-                            extrusion->junctions.push_back(to_ex_junction(p));
-                        } else {
+                        fuzzy_clip = intersection_ex(fuzzy_clip, *perimeter_generator.lower_slices, ApplySafetyOffset::Yes);
+                    }
+                }
+                if (fuzzy_clip.empty()) {
+                    continue;
+                }
+
+                const auto splitted = Algorithm::split_line(*extrusion, fuzzy_clip, false);
+                if (splitted.empty()) {
+                    // No intersection, skip
+                    continue;
+                }
+
+                // Fuzzy splitted extrusion
+                if (std::all_of(splitted.begin(), splitted.end(), [](const Algorithm::SplitLineJunction& j) { return j.clipped; })) {
+                    // The entire polygon is fuzzified
+                    fuzzy_extrusion_line(extrusion->junctions, slice_z, *r.config);
+                    continue;
+                } else {
+                    const auto                              current_ext = extrusion->junctions;
+                    std::vector<Arachne::ExtrusionJunction> segment;
+                    segment.reserve(current_ext.size());
+                    extrusion->junctions.clear();
+
+                    const auto fuzzy_current_segment = [&segment, &extrusion, &r, slice_z]() {
+                        // Orca: non fuzzy points to isolate fuzzy region
+                        const auto front = segment.front();
+                        const auto back  = segment.back();
+
+                        fuzzy_extrusion_line(segment, slice_z, *r.config, false);
+                        // Orca: only add non fuzzy point if it's not in the extrusion closing point.
+                        if (!extrusion->junctions.empty() && extrusion->junctions.front().p != front.p) {
+                            extrusion->junctions.push_back(front);
+                        }
+                        extrusion->junctions.insert(extrusion->junctions.end(), segment.begin(), segment.end());
+                        // Orca: only add non fuzzy point if it's not in the extrusion closing point.
+                        if (!extrusion->junctions.empty() && extrusion->junctions.back().p != front.p) {
+                            extrusion->junctions.push_back(back);
+                        }
+                        segment.clear();
+                    };
+
+                    const auto to_ex_junction = [&current_ext](const Algorithm::SplitLineJunction& j) -> Arachne::ExtrusionJunction {
+                        Arachne::ExtrusionJunction res = current_ext[j.get_src_index()];
+                        if (!j.is_src()) {
+                            res.p = j.p;
+                        }
+                        return res;
+                    };
+
+                    for (const auto& p : splitted) {
+                        if (p.clipped) {
                             segment.push_back(to_ex_junction(p));
-                            fuzzy_current_segment();
+                        } else {
+                            if (segment.empty()) {
+                                extrusion->junctions.push_back(to_ex_junction(p));
+                            } else {
+                                segment.push_back(to_ex_junction(p));
+                                fuzzy_current_segment();
+                            }
                         }
                     }
-                }
-                if (!segment.empty()) {
-                    fuzzy_current_segment();
-                }
+                    if (!segment.empty()) {
+                        fuzzy_current_segment();
+                    }
 
-                //Orca: ensure the loop is closed after fuzzy
-                if (!extrusion->junctions.empty() && extrusion->junctions.front().p != extrusion->junctions.back().p) {
-                    extrusion->junctions.back().p = extrusion->junctions.front().p;
-                    extrusion->junctions.back().w = extrusion->junctions.front().w;
+                    //Orca: ensure the loop is closed after fuzzy
+                    if (!extrusion->junctions.empty() && extrusion->junctions.front().p != extrusion->junctions.back().p) {
+                        extrusion->junctions.back().p = extrusion->junctions.front().p;
+                        extrusion->junctions.back().w = extrusion->junctions.front().w;
+                    }
                 }
             }
         }
     }
 }
-}
+
 } // namespace Slic3r::Feature::FuzzySkin
