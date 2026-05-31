@@ -3270,8 +3270,15 @@ unsigned int PresetBundle::sync_ams_list(std::vector<std::pair<DynamicPrintConfi
                     iter = std::find_if(filaments.begin(), filaments.end(), [](auto &f) {
                         return f.is_compatible && f.is_system;
                     });
-                if (iter == filaments.end())
+                if (iter == filaments.end()) {
+                    // Keep vectors aligned with AMS slot indexes when no fallback preset is available.
+                    ams_infos.back().valid = false;
+                    ams_filament_presets.push_back("");
+                    ams_filament_colors.push_back("");
+                    ams_filament_color_types.push_back("");
+                    ams_multi_color_filment.push_back({});
                     continue;
+                }
             }
             unknowns.emplace_back(&ams, boost::algorithm::starts_with(iter->name, filament_type) ?
                                             (has_type ? L("The filament may not be compatible with the current machine settings. Generic filament presets will be used.") :
@@ -3392,6 +3399,16 @@ unsigned int PresetBundle::sync_ams_list(std::vector<std::pair<DynamicPrintConfi
         auto exist_colors = filament_color->values;
         auto exist_color_types = filament_color_type->values;
         auto exist_filament_presets = this->filament_presets;
+        std::string default_filament_preset = this->filaments.first_visible().name;
+        if (!exist_filament_presets.empty()) {
+            default_filament_preset = exist_filament_presets.back();
+        }
+        if (exist_color_types.size() < exist_colors.size()) {
+            exist_color_types.resize(exist_colors.size(), "1");
+        }
+        if (exist_filament_presets.size() < exist_colors.size()) {
+            exist_filament_presets.resize(exist_colors.size(), default_filament_preset);
+        }
         std::vector<std::vector<std::string>> exist_multi_color_filment;
         exist_multi_color_filment.resize(exist_colors.size());
         for (int i = 0; i < exist_colors.size(); i++) {
@@ -3419,7 +3436,15 @@ unsigned int PresetBundle::sync_ams_list(std::vector<std::pair<DynamicPrintConfi
                 ams_infos[i].filament_preset = ams_filament_presets[i];
                 ams_infos[i].mutli_filament_color = ams_multi_color_filment[i];
                 if (!ams_infos[i].is_map) {
-                    need_append_colors.emplace_back(ams_infos[i]);
+                    if (i < exist_filament_presets.size() && i < exist_colors.size() && i < exist_color_types.size() && i < exist_multi_color_filment.size()) {
+                        // When a slot is not mapped, resync by slot index instead of appending a new filament.
+                        exist_filament_presets[i] = ams_infos[i].filament_preset;
+                        exist_colors[i]           = ams_filament_colors[i];
+                        exist_color_types[i]      = ams_filament_color_types[i].empty() ? "1" : ams_filament_color_types[i];
+                        exist_multi_color_filment[i] = ams_infos[i].mutli_filament_color.empty() ? std::vector<std::string>{ams_filament_colors[i]} : ams_infos[i].mutli_filament_color;
+                    } else {
+                        need_append_colors.emplace_back(ams_infos[i]);
+                    }
                     ams_filament_colors[i]     = "";
                     ams_filament_color_types[i] = "";
                     ams_filament_presets[i]    = "";
@@ -3427,6 +3452,9 @@ unsigned int PresetBundle::sync_ams_list(std::vector<std::pair<DynamicPrintConfi
                 }
             }
             else {
+                if (i >= ams_filament_presets.size() || i >= ams_filament_colors.size() || i >= ams_filament_color_types.size() || i >= ams_multi_color_filment.size()) {
+                    continue;
+                }
                 ams_filament_colors[i]     = "";
                 ams_filament_color_types[i] = "";
                 ams_filament_presets[i]    = "";
@@ -3567,7 +3595,6 @@ void PresetBundle::update_filament_multi_color()
         }
     }
     ConfigOptionStrings *filament_multi_colour = project_config.option<ConfigOptionStrings>("filament_multi_colour");
-    filament_multi_colour->resize(exsit_multi_colors.size());
     filament_multi_colour->values = exsit_multi_colors;
 }
 
