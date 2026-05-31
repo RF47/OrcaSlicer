@@ -3271,12 +3271,31 @@ unsigned int PresetBundle::sync_ams_list(std::vector<std::pair<DynamicPrintConfi
                         return f.is_compatible && f.is_system;
                     });
                 if (iter == filaments.end()) {
+                    auto fallback_iter = std::find_if(filaments.begin(), filaments.end(), [](auto &f) {
+                        return f.is_compatible;
+                    });
+                    if (fallback_iter == filaments.end()) {
+                        fallback_iter = filaments.begin();
+                    }
+
                     // Keep vectors aligned with AMS slot indexes when no fallback preset is available.
                     ams_infos.back().valid = false;
-                    ams_filament_presets.push_back("");
-                    ams_filament_colors.push_back("");
-                    ams_filament_color_types.push_back("");
-                    ams_multi_color_filment.push_back({});
+                    if (fallback_iter != filaments.end()) {
+                        std::string fallback_color = filament_color.empty() ? "#CECECE" : filament_color;
+                        std::string fallback_color_type = filament_color_type.empty() ? "1" : filament_color_type;
+                        ams_filament_presets.push_back(fallback_iter->name);
+                        ams_filament_colors.push_back(fallback_color);
+                        ams_filament_color_types.push_back(fallback_color_type);
+                        if (filament_multi_color.empty()) {
+                            filament_multi_color.push_back(fallback_color);
+                        }
+                        ams_multi_color_filment.push_back(filament_multi_color);
+                    } else {
+                        ams_filament_presets.push_back("");
+                        ams_filament_colors.push_back("");
+                        ams_filament_color_types.push_back("");
+                        ams_multi_color_filment.push_back({});
+                    }
                     continue;
                 }
             }
