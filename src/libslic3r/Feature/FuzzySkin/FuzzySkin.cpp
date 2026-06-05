@@ -561,10 +561,14 @@ static std::vector<MergedFuzzyRegion> collect_merged_fuzzy_regions(const std::ve
 Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perimeter_generator, const size_t loop_idx, const bool is_contour)
 {
     Polygon fuzzified;
-
-    const auto  slice_z = perimeter_generator.slice_z;
-    const auto& regions = perimeter_generator.regions_by_fuzzify;
-    const bool has_lower_slices = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    ExPolygons expanded_lower_slices;
+    const double extrusion_width = (loop_idx == 0) ? perimeter_generator.ext_perimeter_flow.width() : perimeter_generator.perimeter_flow.width();
+    const auto slice_z           = perimeter_generator.slice_z;
+    const auto& regions          = perimeter_generator.regions_by_fuzzify;
+    const bool has_lower_slices  = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    if (has_lower_slices) {
+        expanded_lower_slices = offset_ex(*perimeter_generator.lower_slices, scale_(extrusion_width));
+    }
     if (regions.size() == 1) { // optimization
         const auto& config  = regions.begin()->first;
         const bool  fuzzify = should_fuzzify(config, perimeter_generator.layer_id, loop_idx, is_contour);
@@ -578,7 +582,7 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
             return fuzzified;
         }
 
-        auto splitted = Algorithm::split_line(polygon, *perimeter_generator.lower_slices, true);
+        auto splitted = Algorithm::split_line(polygon, expanded_lower_slices, true);
         if (splitted.empty()) {
             return polygon;
         }
@@ -681,9 +685,9 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
         ExPolygons fuzzy_clip = r.expolygons;
         if (has_lower_slices) {
             if (fuzzy_clip.empty()) {
-                fuzzy_clip = *perimeter_generator.lower_slices;
+                fuzzy_clip = expanded_lower_slices;
             } else {
-                fuzzy_clip = intersection_ex(fuzzy_clip, *perimeter_generator.lower_slices, ApplySafetyOffset::Yes);
+                fuzzy_clip = intersection_ex(fuzzy_clip, expanded_lower_slices, ApplySafetyOffset::Yes);
             }
         }
         if (fuzzy_clip.empty()) {
@@ -747,9 +751,14 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
 
 void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerator& perimeter_generator, const bool is_contour)
 {
-    const auto  slice_z = perimeter_generator.slice_z;
-    const auto& regions = perimeter_generator.regions_by_fuzzify;
-    const bool has_lower_slices = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    ExPolygons expanded_lower_slices;
+    const double extrusion_width = extrusion->junctions.empty() ? 0.0 : extrusion->junctions.front().w;
+    const auto slice_z           = perimeter_generator.slice_z;
+    const auto& regions          = perimeter_generator.regions_by_fuzzify;
+    const bool has_lower_slices  = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    if (has_lower_slices) {
+        expanded_lower_slices = offset_ex(*perimeter_generator.lower_slices, extrusion_width);
+    }
     if (regions.size() == 1) { // optimization
         const auto& config = regions.begin()->first;
         const bool fuzzify = should_fuzzify(config, perimeter_generator.layer_id, extrusion->inset_idx, is_contour);
@@ -761,7 +770,7 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
             return;
         }
 
-        const auto splitted = Algorithm::split_line(*extrusion, *perimeter_generator.lower_slices, false);
+        const auto splitted = Algorithm::split_line(*extrusion, expanded_lower_slices, false);
         if (splitted.empty()) {
             return;
         }
@@ -875,9 +884,9 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
                 ExPolygons fuzzy_clip = r.expolygons;
                 if (has_lower_slices) {
                     if (fuzzy_clip.empty()) {
-                        fuzzy_clip = *perimeter_generator.lower_slices;
+                        fuzzy_clip = expanded_lower_slices;
                     } else {
-                        fuzzy_clip = intersection_ex(fuzzy_clip, *perimeter_generator.lower_slices, ApplySafetyOffset::Yes);
+                        fuzzy_clip = intersection_ex(fuzzy_clip, expanded_lower_slices, ApplySafetyOffset::Yes);
                     }
                 }
                 if (fuzzy_clip.empty()) {
