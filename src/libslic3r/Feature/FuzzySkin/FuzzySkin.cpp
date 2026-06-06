@@ -562,12 +562,14 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
 {
     Polygon fuzzified;
     ExPolygons expanded_lower_slices;
-    const double extrusion_width = (loop_idx == 0) ? perimeter_generator.ext_perimeter_flow.width() : perimeter_generator.perimeter_flow.width();
-    const auto slice_z           = perimeter_generator.slice_z;
-    const auto& regions          = perimeter_generator.regions_by_fuzzify;
-    const bool has_lower_slices  = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    const double extrusion_width      = (loop_idx == 0) ? perimeter_generator.ext_perimeter_flow.width() : perimeter_generator.perimeter_flow.width();
+    const auto slice_z                = perimeter_generator.slice_z;
+    const auto& regions               = perimeter_generator.regions_by_fuzzify;
+    const bool has_lower_slices       = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    const auto& config                = regions.begin()->first;
+    const double fuzzy_skin_thickness = unscale<double>(config.thickness);
     if (has_lower_slices) {
-        expanded_lower_slices = offset_ex(*perimeter_generator.lower_slices, scale_(extrusion_width));
+        expanded_lower_slices = offset_ex(*perimeter_generator.lower_slices, scale_(extrusion_width + fuzzy_skin_thickness));
     }
     if (regions.size() == 1) { // optimization
         const auto& config  = regions.begin()->first;
@@ -752,12 +754,14 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
 void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerator& perimeter_generator, const bool is_contour)
 {
     ExPolygons expanded_lower_slices;
-    const double extrusion_width = extrusion->junctions.empty() ? 0.0 : extrusion->junctions.front().w;
-    const auto slice_z           = perimeter_generator.slice_z;
-    const auto& regions          = perimeter_generator.regions_by_fuzzify;
-    const bool has_lower_slices  = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    const double extrusion_width      = extrusion->junctions.empty() ? 0.0 : extrusion->junctions.front().w;
+    const auto slice_z                = perimeter_generator.slice_z;
+    const auto& regions               = perimeter_generator.regions_by_fuzzify;
+    const bool has_lower_slices       = perimeter_generator.lower_slices != nullptr && !perimeter_generator.lower_slices->empty();
+    const auto& config                = regions.begin()->first;
+    const double fuzzy_skin_thickness = config.thickness;
     if (has_lower_slices) {
-        expanded_lower_slices = offset_ex(*perimeter_generator.lower_slices, extrusion_width);
+        expanded_lower_slices = offset_ex(*perimeter_generator.lower_slices, extrusion_width + fuzzy_skin_thickness);
     }
     if (regions.size() == 1) { // optimization
         const auto& config = regions.begin()->first;
