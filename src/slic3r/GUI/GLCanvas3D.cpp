@@ -4763,7 +4763,42 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
             may_have_hover_feedback = hit.is_valid();
         }
 
-        if (may_have_hover_feedback || !m_tooltip.is_empty())
+        bool ui_hotspot_hover = false;
+        const Size canvas_size = get_canvas_size();
+
+        // 3D navigator (view cube) at bottom-left.
+        if (m_canvas_toolbar_pos[0] > 0.0f) {
+            const float navigator_size = m_canvas_toolbar_pos[0];
+            ui_hotspot_hover = (pos(0) >= 0 && pos(0) < navigator_size &&
+                                pos(1) >= canvas_size.get_height() - navigator_size && pos(1) < canvas_size.get_height());
+        }
+
+        // Canvas toolbar buttons + popup trigger area.
+        if (!ui_hotspot_hover) {
+            float sc = get_scale();
+#ifdef WIN32
+            const int dpi = get_dpi_for_window(wxGetApp().GetTopWindow());
+            sc *= (float)dpi / (float)DPI_DEFAULT;
+#endif // WIN32
+            const float btn_size = 36.f * sc;
+            const float spacing = 6.f * sc;
+            const float margin_x = m_canvas_toolbar_pos[0] > 0 ? 0.f : (10.f * sc);
+            const float margin_y = 10.f * sc;
+            const float toolbar_x = m_canvas_toolbar_pos[0] + margin_x;
+            const float toolbar_y_bottom = canvas_size.get_height() - margin_y;
+            const bool zoom_btn = wxGetApp().show_canvas_zoom_button();
+            const float toolbar_y_top = toolbar_y_bottom - (zoom_btn ? (2.f * btn_size + spacing) : btn_size);
+            ui_hotspot_hover = (pos(0) >= toolbar_x && pos(0) < toolbar_x + btn_size &&
+                                pos(1) >= toolbar_y_top && pos(1) < toolbar_y_bottom);
+        }
+
+        if (!ui_hotspot_hover && m_canvas_type == ECanvasType::CanvasPreview) {
+            // G-code feature visibility controls live near the right side legend.
+            const float legend_hotspot_width = 420.f * get_scale();
+            ui_hotspot_hover = pos(0) >= canvas_size.get_width() - legend_hotspot_width;
+        }
+
+        if (may_have_hover_feedback || ui_hotspot_hover || !m_tooltip.is_empty())
             m_dirty = true;
     }
     else
