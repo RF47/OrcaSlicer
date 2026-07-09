@@ -4176,6 +4176,8 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
         printf((format_mouse_event_debug_message(evt) + " - Consumed by ImGUI\n").c_str());
 #endif /* SLIC3R_DEBUG_MOUSE_EVENTS */
         m_dirty = true;
+        if (m_canvas_type == ECanvasType::CanvasPreview)
+            return;
         // do not return if dragging or tooltip not empty to allow for tooltip update
         // also, do not return if the mouse is moving and also is inside MM gizmo to allow update seed fill selection
         if (!m_mouse.dragging && m_tooltip.is_empty() && (m_gizmos.get_current_type() != GLGizmosManager::MmSegmentation || !evt.Moving()))
@@ -4749,7 +4751,20 @@ void GLCanvas3D::on_mouse(wxMouseEvent& evt)
         if (m_selection.is_empty())
             m_gizmos.reset_all_states();
 
-        m_dirty = true;
+        GLGizmoBase* current_gizmo = m_gizmos.get_current();
+        const bool had_hover_feedback = !m_hover_volume_idxs.empty() || !m_hover_plate_idxs.empty() || (current_gizmo != nullptr && current_gizmo->get_hover_id() != -1);
+        bool may_have_hover_feedback = had_hover_feedback;
+
+        if (!may_have_hover_feedback && m_picking_enabled && !m_mouse.dragging && !m_gizmos.is_dragging()) {
+            const ClippingPlane clipping_plane =
+                ((!current_gizmo || current_gizmo->apply_clipping_plane()) ? m_gizmos.get_clipping_plane() : ClippingPlane::ClipsNothing())
+                    .inverted_normal();
+            const SceneRaycaster::HitResult hit = m_scene_raycaster.hit(m_mouse.position, wxGetApp().plater()->get_camera(), &clipping_plane);
+            may_have_hover_feedback = hit.is_valid();
+        }
+
+        if (may_have_hover_feedback || !m_tooltip.is_empty())
+            m_dirty = true;
     }
     else
         evt.Skip();
