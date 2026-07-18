@@ -32,8 +32,6 @@ int invoke_on_all_cloud_agents(const std::map<std::string, std::shared_ptr<IClou
 
 } // namespace
 
-bool NetworkAgent::use_legacy_network = true;
-
 // ============================================================================
 // Static methods - delegate to BBLNetworkPlugin
 // ============================================================================
@@ -117,21 +115,20 @@ void NetworkAgent::add_cloud_agent(const std::string& provider, std::shared_ptr<
 
 void NetworkAgent::set_printer_agent(std::shared_ptr<IPrinterAgent> printer_agent)
 {
-    if (!printer_agent) {
-        return;
-    }
-
     // Disconnect all callbacks from the old agent
     auto old_printer_agent = m_printer_agent;
 
     m_printer_agent    = std::move(printer_agent);
-    m_printer_agent_id = m_printer_agent->get_agent_info().id;
+    m_printer_agent_id = m_printer_agent ? m_printer_agent->get_agent_info().id : "";
 
     // Disconnect the old agent's connections/threads.
     if (old_printer_agent && old_printer_agent != m_printer_agent) {
         old_printer_agent->disconnect_printer();
         apply_printer_callbacks(old_printer_agent, {});
     }
+
+    if (!m_printer_agent)
+        return;
 
     apply_printer_callbacks(m_printer_agent, m_printer_callbacks);
 }
