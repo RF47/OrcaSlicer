@@ -2,6 +2,7 @@
 
 #include "libslic3r/GCodeReader.hpp"
 #include "libslic3r/Layer.hpp"
+#include "libslic3r/MinimumSpanningTree.hpp"
 
 #include "test_helpers.hpp" // get access to init_print, etc
 
@@ -96,6 +97,32 @@ SCENARIO("Support layer Z honors contact distance", "[SupportMaterial]")
 
 // extrude_support once held a `static` lambda capturing `this`, so a second export in the
 // same process dereferenced a returned stack frame (ASan: stack-use-after-return).
+TEST_CASE("Minimum spanning tree resolves equal distances deterministically", "[SupportMaterial][Regression]")
+{
+    const std::vector<Slic3r::Point> vertices {
+        Slic3r::Point(0, 0),
+        Slic3r::Point(10, 0),
+        Slic3r::Point(0, 10),
+        Slic3r::Point(10, 10),
+    };
+
+    const Slic3r::MinimumSpanningTree mst(vertices);
+    auto neighbours = mst.adjacent_nodes(Slic3r::Point(0, 0));
+    std::sort(neighbours.begin(), neighbours.end(), [](const Slic3r::Point& lhs, const Slic3r::Point& rhs) {
+        if (lhs.x() != rhs.x())
+            return lhs.x() < rhs.x();
+        return lhs.y() < rhs.y();
+    });
+
+    const std::vector<Slic3r::Point> expected {
+        Slic3r::Point(0, 10),
+        Slic3r::Point(10, 0),
+        Slic3r::Point(10, 10),
+    };
+
+    REQUIRE(neighbours == expected);
+}
+
 TEST_CASE("Support G-code emission survives a second slice in the same process", "[SupportMaterial][Regression]")
 {
     const std::string first = slice({ TestMesh::overhang }, { { "enable_support", 1 } });
