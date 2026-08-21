@@ -63,7 +63,16 @@ auto MinimumSpanningTree::prim(std::vector<Point> vertices) const -> AdjacencyGr
         using MapValue = std::pair<const Point*, coordf_t>;
         const auto closest = std::min_element(smallest_distance.begin(), smallest_distance.end(),
                                               [](const MapValue& a, const MapValue& b) {
-                                                  return a.second < b.second;
+                                                  if (a.second != b.second)
+                                                      return a.second < b.second;
+                                                  // Keep Prim's selection deterministic when multiple candidates are at the
+                                                  // same distance. unordered_map iteration order is not stable across runs,
+                                                  // and that can make the tree topology differ without a real metric change.
+                                                  const Point& pa = *a.first;
+                                                  const Point& pb = *b.first;
+                                                  if (pa.x() != pb.x())
+                                                      return pa.x() < pb.x();
+                                                  return pa.y() < pb.y();
                                               });
 
         //Add this point to the graph and remove it from the candidates.
