@@ -88,6 +88,10 @@ if (SLIC3R_GUI)
     list(FILTER wxWidgets_LIBRARIES EXCLUDE REGEX OpenGL)
 
 #    list(REMOVE_ITEM wxWidgets_LIBRARIES oleacc)
+
+    find_package(wxInspector REQUIRED)
+    list(APPEND wxWidgets_LIBRARIES "wxInspector::wxInspector")
+
     message(STATUS "wx libs: ${wxWidgets_LIBRARIES}")
 
     add_subdirectory(slic3r)
@@ -252,14 +256,6 @@ if (WIN32)
                 VERBATIM
             )
         endforeach ()
-
-        if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-            orcaslicer_copy_dlls(COPY_DLLS "Debug" "d" output_dlls_Debug)
-        elseif("${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")
-            orcaslicer_copy_dlls(COPY_DLLS "RelWithDebInfo" "" output_dlls_Release)
-        else()
-            orcaslicer_copy_dlls(COPY_DLLS "Release" "" output_dlls_Release)
-        endif()
     else ()
         file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/resources" WIN_RESOURCES_SYMLINK)
         add_custom_command(TARGET OrcaSlicer POST_BUILD
@@ -275,16 +271,33 @@ if (WIN32)
         COMMENT "Copying Python runtime into the build tree"
         VERBATIM)
 
+    if (CMAKE_CONFIGURATION_TYPES)
+        # Multi-config generators (Visual Studio, Ninja Multi-Config): copy per config.
+        foreach (cfg ${CMAKE_CONFIGURATION_TYPES})
+            if ("${cfg}" STREQUAL "Debug")
+                orcaslicer_copy_dlls(COPY_DLLS "Debug" "d" output_dlls_Debug)
+            elseif("${cfg}" STREQUAL "RelWithDebInfo")
+                orcaslicer_copy_dlls(COPY_DLLS "RelWithDebInfo" "" output_dlls_RelWithDebInfo)
+            else()
+                orcaslicer_copy_dlls(COPY_DLLS "${cfg}" "" output_dlls_${cfg})
+            endif()
+        endforeach()
+    else()
+        # Single-config generators (Ninja): use CMAKE_BUILD_TYPE.
+        if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+            orcaslicer_copy_dlls(COPY_DLLS "Debug" "d" output_dlls_Debug)
+        elseif("${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")
+            orcaslicer_copy_dlls(COPY_DLLS "RelWithDebInfo" "" output_dlls_RelWithDebInfo)
+        else()
+            orcaslicer_copy_dlls(COPY_DLLS "Release" "" output_dlls_Release)
+        endif()
+    endif()
 
 else ()
     if (APPLE AND NOT CMAKE_MACOSX_BUNDLE)
         # On OSX, the name of the binary matches the name of the Application.
         add_custom_command(TARGET OrcaSlicer POST_BUILD
             COMMAND ln -sf OrcaSlicer orca-slicer
-            WORKING_DIRECTORY "$<TARGET_FILE_DIR:OrcaSlicer>"
-            VERBATIM)
-    else ()
-        add_custom_command(TARGET OrcaSlicer POST_BUILD
             WORKING_DIRECTORY "$<TARGET_FILE_DIR:OrcaSlicer>"
             VERBATIM)
     endif ()
@@ -309,6 +322,13 @@ else ()
         set(MACOSX_BUNDLE_BUNDLE_NAME "OrcaSlicer")
         set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${SoftFever_VERSION})
         set(MACOSX_BUNDLE_COPYRIGHT "Copyright(C) 2022-2024 Li Jiang All Rights Reserved")
+        if (XCODE)
+            # Xcode's CodeSign phase fails on the bundled Python runtime's dotted
+            # dirs (python3.12) under Contents/MacOS. Skip it for local dev builds
+            # and let the linker ad-hoc sign; the shipped bundle is signed by the
+            # Ninja/CI packaging path (build_release_macos.sh, build_orca.yml).
+            set_target_properties(OrcaSlicer PROPERTIES XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED NO)
+        endif()
     endif()
     add_custom_command(TARGET OrcaSlicer POST_BUILD
         COMMAND ln -sfn "${SLIC3R_RESOURCES_DIR}" "${BIN_RESOURCES_DIR}"

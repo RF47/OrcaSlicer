@@ -751,7 +751,7 @@ Polygon apply_fuzzy_skin(const Polygon& polygon, const PerimeterGenerator& perim
     return fuzzified;
 }
 
-void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerator& perimeter_generator, const bool is_contour)
+void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerator& perimeter_generator, const bool is_contour, const bool closed)
 {
     ExPolygons expanded_lower_slices;
     const double extrusion_width      = extrusion->junctions.empty() ? 0.0 : extrusion->junctions.front().w;
@@ -770,7 +770,7 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
             return;
 
         if (!has_lower_slices) { // no lower slices available — fuzzify the whole loop
-            fuzzy_extrusion_line(extrusion->junctions, slice_z, config);
+            fuzzy_extrusion_line(extrusion->junctions, slice_z, config, closed);
             return;
         }
 
@@ -843,8 +843,17 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
 
             // Fast path: single merged region — apply directly without splitting
             if (merged_regions.size() == 1 && merged_regions.front().expolygons.empty() && !has_lower_slices) {
-                fuzzy_extrusion_line(extrusion->junctions, slice_z, *merged_regions.front().config);
+                fuzzy_extrusion_line(extrusion->junctions, slice_z, *merged_regions.front().config, closed);
                 return;
+            }
+
+            // Open path means this is a thin wall that collapsed into a single thick line, in this case the path will go exactly
+            // between the middle two sides of the object. And since the paint segmentation never goes beyond the middle line because
+            // it uses voronoi diagram, we need to expand the segmentation a little bit to make sure it covers the path.
+            if (!closed) {
+                for (auto& r : merged_regions) {
+                    r.expolygons = offset_ex(r.expolygons, perimeter_generator.ext_perimeter_flow.scaled_width() / 10);
+                }
             }
 
 #ifdef DEBUG_FUZZY
@@ -906,7 +915,7 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
                 // Fuzzy splitted extrusion
                 if (std::all_of(splitted.begin(), splitted.end(), [](const Algorithm::SplitLineJunction& j) { return j.clipped; })) {
                     // The entire polygon is fuzzified
-                    fuzzy_extrusion_line(extrusion->junctions, slice_z, *r.config);
+                    fuzzy_extrusion_line(extrusion->junctions, slice_z, *r.config, closed);
                     continue;
                 } else {
                     const auto                              current_ext = extrusion->junctions;
@@ -957,7 +966,7 @@ void apply_fuzzy_skin(Arachne::ExtrusionLine* extrusion, const PerimeterGenerato
                     }
 
                     //Orca: ensure the loop is closed after fuzzy
-                    if (!extrusion->junctions.empty() && extrusion->junctions.front().p != extrusion->junctions.back().p) {
+                    if (closed && !extrusion->junctions.empty() && extrusion->junctions.front().p != extrusion->junctions.back().p) {
                         extrusion->junctions.back().p = extrusion->junctions.front().p;
                         extrusion->junctions.back().w = extrusion->junctions.front().w;
                     }

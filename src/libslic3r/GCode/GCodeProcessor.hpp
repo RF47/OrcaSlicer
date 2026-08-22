@@ -637,6 +637,9 @@ class Print;
                 //For line move, there are same. For arc move, there are different.
                 Vec3f enter_direction;
                 Vec3f exit_direction;
+                // Orca: move direction over all four axes, unit length. Used by
+                // calc_vmax_junction_deviation(); see there for why E is normalized in.
+                Vec4f jd_unit_vec;
 
                 void reset();
             };
@@ -1109,6 +1112,10 @@ class Print;
         std::vector<ExtruderPreHeating::ExtruderUsageBlcok>  m_extruder_blocks;
         unsigned int m_machine_start_gcode_end_line_id{ (unsigned int) (-1) };
         unsigned int m_machine_end_gcode_start_line_id{ (unsigned int) (-1) };
+        // Set when the MACHINE_END_GCODE_START tag is seen during the streaming parse; tells
+        // process_M400 to skip post-print end-gcode dwells (air purification, timelapse, sound)
+        // so they don't inflate the M73 estimate. BBS excludes them in calculate_time(is_final).
+        bool m_skip_end_gcode_delays{ false };
         // Tracks, during the stream, which filament sits in each physical nozzle and which nozzle each
         // extruder currently carries. Written by both branches of the two-arg process_filament_change
         // (the fallback branch does occupancy bookkeeping only); read by the richer change-time model
@@ -1484,6 +1491,16 @@ class Print;
         float get_axis_max_acceleration(PrintEstimatedStatistics::ETimeMode mode, Axis axis, int machine_idx) const;
         float get_axis_max_jerk_with_jd(PrintEstimatedStatistics::ETimeMode mode, Axis axis, float acceleration) const;
         float get_axis_max_jerk_with_jd(PrintEstimatedStatistics::ETimeMode mode, Axis axis) const;
+        // Orca: junction deviation for a block at the given acceleration, 0 for a classic jerk machine.
+        float get_junction_deviation(PrintEstimatedStatistics::ETimeMode mode, float acceleration) const;
+        // Orca: acceleration along the junction direction, clamped by the per axis limits.
+        float calc_junction_acceleration(const TimeBlock& block, const Vec4f& junction_unit_vec,
+                                         PrintEstimatedStatistics::ETimeMode mode) const;
+        // Orca: entry speed from the junction deviation model, which limits a corner by its angle alone
+        // and is therefore isotropic, unlike per axis jerk. Negative means classic jerk applies instead.
+        float calc_vmax_junction_deviation(const TimeBlock& block, const TimeMachine::State& prev,
+                                           const TimeMachine::State& curr, bool has_prev_move,
+                                           PrintEstimatedStatistics::ETimeMode mode) const;
         float get_axis_max_jerk(PrintEstimatedStatistics::ETimeMode mode, Axis axis) const;
         Vec3f get_xyz_max_jerk(PrintEstimatedStatistics::ETimeMode mode) const;
         float get_retract_acceleration(PrintEstimatedStatistics::ETimeMode mode) const;
