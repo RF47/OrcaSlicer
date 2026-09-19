@@ -1,5 +1,6 @@
 #include "MainFrame.hpp"
 
+#include <charconv>
 #include <cstdlib>
 #include <wx/panel.h>
 #include <wx/textentry.h>
@@ -2048,6 +2049,14 @@ void MainFrame::remember_print_select(PrintSelectType select_type)
     wxGetApp().app_config->save();
 }
 
+bool MainFrame::is_print_action_available(PrintSelectType type) const
+{
+    // Orca: "Send to Multi-device" only shows up in the dropdown when multi-device is enabled
+    if (type == PrintSelectType::ePrintMultiMachine)
+        return wxGetApp().app_config->get_bool("enable_multi_machine");
+    return true;
+}
+
 bool MainFrame::get_remembered_print_select(PrintSelectType& out) const
 {
     if (!wxGetApp().app_config->get_bool("remember_print_action"))
@@ -2055,10 +2064,16 @@ bool MainFrame::get_remembered_print_select(PrintSelectType& out) const
     const std::string saved = wxGetApp().app_config->get("last_print_action");
     if (saved.empty())
         return false;
-    int value = atoi(saved.c_str());
+    int value = 0;
+    auto result = std::from_chars(saved.data(), saved.data() + saved.size(), value);
+    if (result.ec != std::errc())
+        return false;
     if (value < static_cast<int>(PrintSelectType::ePrintAll) || value > static_cast<int>(PrintSelectType::ePrintMultiMachine))
         return false;
-    out = static_cast<PrintSelectType>(value);
+    PrintSelectType type = static_cast<PrintSelectType>(value);
+    if (!is_print_action_available(type))
+        return false;
+    out = type;
     return true;
 }
 
