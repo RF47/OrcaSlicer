@@ -507,10 +507,10 @@ void GLVolume::render_with_outline(const GUI::Size& cnv_size)
     glsafe(::glClearStencil(0));
     glsafe(::glClear(GL_STENCIL_BUFFER_BIT));
     glsafe(::glStencilFunc(GL_ALWAYS, 0xFF, 0xFF));
-    if (tverts_range == std::make_pair<size_t, size_t>(0, -1))
-        model.render(shader);
-    else
-        model.render(this->tverts_range, shader);
+    // This pass paints the visible surface, so it must go through simple_render() to keep
+    // per-triangle MMU paint colors; the later is_outline passes only draw the flat silhouette
+    // highlight and are fine using the single-color model.
+    simple_render(shader, model_objects, colors);
     glsafe(::glStencilFunc(GL_NOTEQUAL, 0xFF, 0xFF));
     glsafe(::glStencilMask(0x00));
     shader->set_uniform("is_outline", true);
