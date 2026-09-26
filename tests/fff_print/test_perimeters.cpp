@@ -255,3 +255,60 @@ TEST_CASE("Only one wall on the first layer needs a bottom shell", "[Perimeters]
     // No bottom shell: the option is inert, down to the same walls an unchecked box gives.
     CHECK_THAT(one_wall_no_shell, Catch::Matchers::WithinAbs(plain_no_shell, 1.0));
 }
+
+// TestMesh::bridge is a 50x10mm deck from z=5 to z=8 on two 5mm-wide pillars, leaving a 40mm span. The deck's
+// first layer (print_z 5.2) crosses the span unsupported; the layers above it rest on the deck.
+TEST_CASE("Fuzzy skin leaves the walls of a bridge smooth", "[Perimeters]")
+{
+    const char *wall_generator = GENERATE("classic", "arachne");
+    CAPTURE(wall_generator);
+
+    DynamicPrintConfig config = DynamicPrintConfig::full_print_config();
+    config.set_deserialize_strict({
+        { "wall_generator",             wall_generator },
+        { "layer_height",               0.2 },
+        { "initial_layer_print_height", 0.2 },
+        // One wall, so every wall point along the long sides belongs to the fuzzed outer wall.
+        { "wall_loops",                 1 },
+        { "fuzzy_skin",                 "external" },
+        { "fuzzy_skin_noise_type",      "classic" },
+        { "fuzzy_skin_thickness",       0.3 },
+        { "fuzzy_skin_point_distance",  0.8 },
+    });
+    Print print;
+    init_and_process_print({ TestMesh::bridge }, print, config);
+    REQUIRE_FALSE(print.objects().empty());
+
+    // How far the wall points over the middle 60% of the deck's length stray across its width, worst side.
+    auto mid_span_wall_spread = [&print](double print_z) {
+        for (const Layer *layer : print.objects().front()->layers()) {
+            if (std::abs(layer->print_z - print_z) > 1e-4)
+                continue;
+            const BoundingBox bbox = get_extents(layer->lslices);
+            const coord_t     x_min = bbox.min.x() + bbox.size().x() / 5;
+            const coord_t     x_max = bbox.max.x() - bbox.size().x() / 5;
+            Points            points;
+            for (const LayerRegion *region : layer->regions())
+                region->perimeters.collect_points(points);
+            coord_t spread = 0;
+            for (const bool south : { true, false }) {
+                coord_t lo = bbox.max.y(), hi = bbox.min.y();
+                for (const Point &p : points)
+                    if (p.x() > x_min && p.x() < x_max && (p.y() < bbox.center().y()) == south) {
+                        lo = std::min(lo, p.y());
+                        hi = std::max(hi, p.y());
+                    }
+                spread = std::max(spread, hi - lo);
+            }
+            return unscale<double>(spread);
+        }
+        return -1.;
+    };
+
+    // Control: one deck layer up the same walls rest on the deck, so they are fuzzed.
+    CHECK(mid_span_wall_spread(5.6) > 0.1);
+    // Over the unsupported span the walls stay straight.
+    const double bridged = mid_span_wall_spread(5.2);
+    CHECK(bridged >= 0.);
+    CHECK(bridged < 0.001);
+}
