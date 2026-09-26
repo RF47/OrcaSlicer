@@ -105,6 +105,8 @@ public:
     bool                                            has_fuzzy_hole = false;
     // Preserve construction order so overlap precedence remains deterministic.
     std::vector<std::pair<FuzzySkinConfig, ExPolygons>> regions_by_fuzzify;
+    // Area resting on the layer below, where fuzzy skin is allowed. Empty means no restriction.
+    ExPolygons                                      fuzzy_supported_area;
     
     PerimeterGenerator(
         // Input:
