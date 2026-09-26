@@ -3073,7 +3073,7 @@ static bool _HasExt(const std::vector<FilamentInfo> &ams_mapping_result) {
     };
 
     for (const auto &info : ams_mapping_result) {
-        if (info.ams_id == VIRTUAL_AMS_MAIN_ID_STR || info.ams_id == VIRTUAL_AMS_DEPUTY_ID_STR && !info.ams_id.empty()) {
+        if (info.ams_id == VIRTUAL_AMS_MAIN_ID_STR || (info.ams_id == VIRTUAL_AMS_DEPUTY_ID_STR && !info.ams_id.empty())) {
             return true;
         }
     }
@@ -3470,7 +3470,7 @@ void SelectMachineDialog::navigate_to_timelapse_page()
         main_frame->jump_to_monitor();
 
         // then switch to Storage (Media) tab inside Monitor
-        auto* monitor = dynamic_cast<MonitorPanel*>(main_frame->m_monitor);
+        MonitorPanel* monitor = MonitorPanel::if_built();
         if (monitor) {
             auto* tabpanel = monitor->get_tabpanel();
             if (tabpanel) {
