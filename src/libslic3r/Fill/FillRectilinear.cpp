@@ -3094,7 +3094,6 @@ static std::vector<Vec2d> cubic_upper_level(double tau, double h, double period,
 bool FillRectilinear::fill_surface_trapezoidal(
     const Surface*                            surface,
     FillParams                                params,
-    const std::initializer_list<SweepParams>& sweep_params,
     Polylines&                                polylines_out,
     int                                       Pattern_type) // 0=grid, 1=triangular, 2=stars, 3=cubic
 {
@@ -3151,9 +3150,7 @@ bool FillRectilinear::fill_surface_trapezoidal(
         const Point grid_center = bb.center();
         bb.merge(align_to_grid(bb.min, Point(period, period), grid_center));
         const coord_t xmin = bb.min.x();
-        const coord_t xmax = bb.max.x();
         const coord_t ymin = bb.min.y();
-        const coord_t ymax = bb.max.y();
 
         BoundingBox cover = get_extents(expolygon);
         if (infill_layer_id % 2 == 1) {
@@ -3554,9 +3551,7 @@ Polylines FillGrid::fill_surface(const Surface *surface, const FillParams &param
     if (params.multiline > 1) {
         // Experimental trapezoidal grid
         if (!this->fill_surface_trapezoidal(
-                 surface, params,
-                 { { 0.f, 0.f }, { float(M_PI / 2.), 0.f } },
-                polylines_out,0))
+                 surface, params, polylines_out, 0))
             BOOST_LOG_TRIVIAL(error) << "FillGrid::fill_surface_trapezoidal() failed.";
 
     } else {
@@ -3596,9 +3591,7 @@ Polylines FillTriangles::fill_surface(const Surface *surface, const FillParams &
         if (params.multiline > 1) {
         // Experimental trapezoidal grid
         if (!this->fill_surface_trapezoidal(
-                 surface, params,
-                 { { 0.f, 0.f }, { float(M_PI / 2.), 0.f } },
-                polylines_out,1))
+                 surface, params, polylines_out, 1))
             BOOST_LOG_TRIVIAL(error) << "FillGrid::fill_surface_trapezoidal() failed.";
 
     } else {
@@ -3617,9 +3610,7 @@ Polylines FillStars::fill_surface(const Surface *surface, const FillParams &para
     Polylines polylines_out;
     if (params.multiline > 1) {
         if (!this->fill_surface_trapezoidal(
-                 surface, params,
-                 {{0.f, 0.f}, {float(M_PI / 3.), 0.f}, {float(2. * M_PI / 3.), float((3. / 2.) * this->spacing * params.multiline / params.density)}},
-                 polylines_out, 2))
+                 surface, params, polylines_out, 2))
             BOOST_LOG_TRIVIAL(error) << "FillStars::fill_surface_trapezoidal() failed.";
     } else {
         if (! this->fill_surface_by_multilines(
@@ -3635,7 +3626,7 @@ Polylines FillCubic::fill_surface(const Surface *surface, const FillParams &para
 {
     Polylines polylines_out;
     if (params.multiline > 1) {
-        if (!this->fill_surface_trapezoidal(surface, params, {}, polylines_out, 3))
+        if (!this->fill_surface_trapezoidal(surface, params, polylines_out, 3))
             BOOST_LOG_TRIVIAL(error) << "FillCubic::fill_surface_trapezoidal() failed.";
         return polylines_out;
     }
