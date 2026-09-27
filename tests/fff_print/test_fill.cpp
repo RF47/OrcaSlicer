@@ -1225,6 +1225,35 @@ TEST_CASE("Multiline tri-hexagon infill covers translated regions across layer r
     }
 }
 
+TEST_CASE("Multiline triangles infill covers translated regions across layer rotations", "[Fill]")
+{
+    const int multiline = GENERATE(2, 3);
+    const ExPolygon region{ Points{ Point::new_scale(80., 40.), Point::new_scale(120., 40.),
+                                    Point::new_scale(120., 80.), Point::new_scale(80., 80.) } };
+    CAPTURE(multiline);
+
+    for (size_t layer_id = 0; layer_id < 3; ++layer_id) {
+        std::unique_ptr<Fill> filler(Fill::new_from_type(ipTriangles));
+        filler->spacing = 0.45;
+        filler->angle = float(M_PI / 7.);
+        filler->fixed_angle = true;
+        filler->layer_id = layer_id;
+        filler->set_bounding_box(get_extents(region.contour));
+
+        FillParams params;
+        params.density = 0.3f;
+        params.multiline = multiline;
+        params.dont_adjust = true;
+        params.anchor_length_max = 0.f;
+
+        Surface surface(stInternal, region);
+        const Polylines paths = filler->fill_surface(&surface, params);
+        CAPTURE(layer_id);
+        REQUIRE_FALSE(paths.empty());
+        CHECK(get_intersections(to_lines(paths)).empty());
+    }
+}
+
 TEST_CASE("Multiline cubic infill follows the cubic lines without crossing itself", "[Fill]")
 {
     const int    multiline = GENERATE(2, 3);
