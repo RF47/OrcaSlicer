@@ -3155,14 +3155,30 @@ bool FillRectilinear::fill_surface_trapezoidal(
         const coord_t ymin = bb.min.y();
         const coord_t ymax = bb.max.y();
 
+        BoundingBox cover = get_extents(expolygon);
+        if (infill_layer_id % 2 == 1) {
+            const coord_t cover_min_x = grid_center.x() + cover.min.y() - grid_center.y();
+            const coord_t cover_max_x = grid_center.x() + cover.max.y() - grid_center.y();
+            const coord_t cover_min_y = grid_center.y() + cover.min.x() - grid_center.x();
+            const coord_t cover_max_y = grid_center.y() + cover.max.x() - grid_center.x();
+            cover.min = Point(cover_min_x, cover_min_y);
+            cover.max = Point(cover_max_x, cover_max_y);
+        }
+        cover.offset(period);
+        const coord_t row_spacing = period / 2;
+        const coord_t first_x = xmin + (coord_t(std::floor(double(cover.min.x() - xmin) / period)) - 1) * period;
+        const coord_t last_x  = xmin + (coord_t(std::ceil(double(cover.max.x() - xmin) / period)) + 1) * period;
+        const coord_t first_row = coord_t(std::floor(double(cover.min.y() - ymin) / row_spacing)) - 1;
+        const coord_t last_row  = coord_t(std::ceil(double(cover.max.y() - ymin) / row_spacing)) + 1;
+
         // Create the two base row patterns once
         Polyline base_row_normal;
-        base_row_normal.points.reserve(((xmax - xmin) / period + 1) * 5); // 5 points per trapezoid
+        base_row_normal.points.reserve(((last_x - first_x) / period + 1) * 5); // 5 points per trapezoid
         Polyline base_row_flipped;
-        base_row_flipped.points.reserve(((xmax - xmin) / period + 1) * 5); // 5 points per trapezoid
+        base_row_flipped.points.reserve(((last_x - first_x) / period + 1) * 5); // 5 points per trapezoid
 
-        // Build complete rows from xmin to xmax
-        for (coord_t x = xmin; x < xmax; x += period) {
+        // Build rows on the same global period grid, limited to the surface cover.
+        for (coord_t x = first_x; x < last_x; x += period) {
             // Normal row
             base_row_normal.points.emplace_back(Point(x, d1 / 2));                             // P0
             base_row_normal.points.emplace_back(Point(x + d1 / 2, d1 / 2));                    // P1
@@ -3178,13 +3194,14 @@ bool FillRectilinear::fill_surface_trapezoidal(
         }
         
         // Pre-allocate polylines
-        const size_t estimated_rows = ((ymax - ymin) / (period / 2) + 1);
+        const size_t estimated_rows = size_t(last_row - first_row + 1);
         polylines.reserve(estimated_rows);
 
-        bool flip_vertical = false;
+        bool flip_vertical = (first_row % 2) != 0;
 
-        // Now just copy and translate vertically
-        for (coord_t y = ymin; y < ymax; y += period / 2) {
+        // Copy and translate only rows intersecting the surface cover.
+        for (coord_t row = first_row; row <= last_row; ++row) {
+            const coord_t y = ymin + row * row_spacing;
             Polyline pl_row = flip_vertical ? base_row_flipped : base_row_normal;
 
             // Translate all points vertically
@@ -3230,40 +3247,33 @@ bool FillRectilinear::fill_surface_trapezoidal(
         const coord_t d2_tri = coord_t(2.0 / std::sqrt(3.0) * d1);
         const coord_t h      = coord_t(0.5 * std::sqrt(3.0) * period); // height of triangle
 
-        //  Align bounding box to the grid
-        bb.merge(align_to_grid(bb.center(), Point(period,h)));
         const size_t layer_mod = infill_layer_id % 3;
         const double angle     = layer_mod * 2.0 * M_PI / 3.0;
+        ExPolygon local = expolygon;
+        local.translate(-rotate_vector.second.x(), -rotate_vector.second.y());
+        if (layer_mod)
+            local.rotate(-angle);
+        BoundingBox cover = get_extents(local);
+        cover.offset(period);
 
-        const Point rotation_center = bb.center();
-        const coord_t half_w = bb.size().x() / 2;
-        const coord_t half_h = bb.size().y() / 2;
-        
-        // Compute how many full periods fit in each direction
-        const coord_t num_periods_x = coord_t(std::ceil(half_w / double(period)));
-        coord_t num_periods_y =coord_t(std::ceil(half_h / double(h)));        
-        // Ensure an even number of rows so the pattern stays centered
-        if ((num_periods_y % 2) != 0)
-            ++num_periods_y;
-        
-        // Compute aligned limits (symmetric around the origin)
-        const coord_t x_min_aligned = -num_periods_x * period;
-        const coord_t x_max_aligned =  num_periods_x * period;   
-        const coord_t y_min_aligned = -num_periods_y * h;
-        const coord_t y_max_aligned =  num_periods_y * h;
+        // Keep the existing origin-anchored lattice, but generate only nearby tiles.
+        const coord_t x_min_aligned = (coord_t(std::floor(double(cover.min.x()) / period)) - 1) * period;
+        const coord_t x_max_aligned = (coord_t(std::ceil(double(cover.max.x()) / period)) + 1) * period;
+        const coord_t first_row = coord_t(std::floor(double(cover.min.y()) / h)) - 1;
+        const coord_t last_row  = coord_t(std::ceil(double(cover.max.y()) / h)) + 1;
 
         // Pre-allocate estimated number of polylines
-        const size_t estimated_rows = (y_max_aligned - y_min_aligned) / h + 2;
-        const size_t estimated_polylines = (estimated_rows + 1) * 2; // base line + trapezoid line per row
+        const size_t estimated_rows = size_t(last_row - first_row + 1);
+        const size_t estimated_polylines = estimated_rows * 2; // base line + trapezoid line per row
         polylines.reserve(estimated_polylines);
 
         // Create the two base row templates once
         Polyline base_line_template;
         base_line_template.points.reserve(2); // 2 points for base line
         Polyline trapezoid_row_normal;
-        trapezoid_row_normal.points.reserve(((x_max_aligned - x_min_aligned) / period + 1) * 5); // 5 points per trapezoid
+        trapezoid_row_normal.points.reserve(((x_max_aligned - x_min_aligned) / period) * 5); // 5 points per trapezoid
         Polyline trapezoid_row_shifted;
-        trapezoid_row_shifted.points.reserve(((x_max_aligned - x_min_aligned) / period + 1) * 5); // 5 points per trapezoid
+        trapezoid_row_shifted.points.reserve(((x_max_aligned - x_min_aligned) / period) * 5); // 5 points per trapezoid
         // Build base line template (from x_min_aligned to x_max_aligned)
         base_line_template.points.emplace_back(Point(x_min_aligned, 0));
         base_line_template.points.emplace_back(Point(x_max_aligned, 0));
@@ -3283,10 +3293,10 @@ bool FillRectilinear::fill_surface_trapezoidal(
         for (auto& p : trapezoid_row_shifted.points)
             p.y() = h - p.y();
 
-        bool shift_row = false;
-
         // Generate pattern by copying and translating templates vertically
-        for (coord_t y = y_min_aligned; y < y_max_aligned; y += h) {
+        bool shift_row = (first_row % 2) != 0;
+        for (coord_t row = first_row; row <= last_row; ++row) {
+            const coord_t y = row * h;
             // Base line - copy and translate
             Polyline base_line = base_line_template;
             for (Point& p : base_line.points) {
@@ -3325,36 +3335,35 @@ bool FillRectilinear::fill_surface_trapezoidal(
         const coord_t d1_half_base   = d1_half / std::sqrt(3.0);
         const coord_t half_period    = period / 2;
         const coord_t quarter_period = period / 4;
+        const coord_t row_y_offset   = tri_height - (2 * tri_height) / 3;
 
-        bb.merge(align_to_grid(bb.center(), Point(period, tri_height)));
         const size_t layer_mod = infill_layer_id % 3;
         const double angle     = layer_mod * 2.0 * M_PI / 3.0;
 
-        const coord_t half_w = bb.size().x() / 2;
-        const coord_t half_h = bb.size().y() / 2;
+        ExPolygon local = expolygon;
+        local.translate(-rotate_vector.second.x(), -rotate_vector.second.y());
+        if (layer_mod)
+            local.rotate(-angle);
+        BoundingBox cover = get_extents(local);
+        cover.offset(period);
 
-        const coord_t num_periods_x = coord_t(std::ceil(half_w / double(period)));
-        coord_t num_periods_y       = coord_t(std::ceil(half_h / double(hex_height)));
-        if ((num_periods_y % 2) != 0)
-            ++num_periods_y;
+        // Keep the lattice anchored at the origin while generating only tiles around this surface.
+        const int64_t first_tile = int64_t(std::floor(double(cover.min.x()) / period)) - 1;
+        const int64_t last_tile  = int64_t(std::ceil(double(cover.max.x()) / period)) + 1;
+        const int64_t first_row  = int64_t(std::floor(double(cover.min.y() - row_y_offset) / hex_height)) - 1;
+        const int64_t last_row   = int64_t(std::ceil(double(cover.max.y() - row_y_offset) / hex_height)) + 1;
 
-        const coord_t x_alignment_shift = half_period;
-        const coord_t y_alignment_shift = (2 * tri_height) / 3;
-        const coord_t x_min_aligned     = -num_periods_x * period - x_alignment_shift;
-        const coord_t x_max_aligned     = num_periods_x * period - x_alignment_shift;
-        const coord_t y_min_aligned     = -num_periods_y * hex_height - y_alignment_shift;
-        const coord_t y_max_aligned     = num_periods_y * hex_height - y_alignment_shift;
-
-        const size_t estimated_rows      = (y_max_aligned - y_min_aligned) / hex_height + 2;
-        const size_t estimated_polylines = (estimated_rows + 1) * 2;
+        const size_t estimated_rows      = size_t(last_row - first_row + 1);
+        const size_t estimated_polylines = estimated_rows * 2;
         polylines.reserve(estimated_polylines);
 
         Polyline star_row_normal;
-        star_row_normal.points.reserve(((x_max_aligned - x_min_aligned) / period + 1) * 7);
+        star_row_normal.points.reserve(size_t(last_tile - first_tile) * 7);
         Polyline star_row_mirrored;
-        star_row_mirrored.points.reserve(((x_max_aligned - x_min_aligned) / period + 1) * 7);
+        star_row_mirrored.points.reserve(size_t(last_tile - first_tile) * 7);
 
-        for (coord_t x = x_min_aligned; x < x_max_aligned; x += period) {
+        for (int64_t tile = first_tile; tile < last_tile; ++tile) {
+            const coord_t x = coord_t(tile * period) - half_period;
             star_row_normal.points.emplace_back(Point(x, hex_height));                                               // P0
             star_row_normal.points.emplace_back(Point(x + quarter_period - d1, hex_height));                         // P1
             star_row_normal.points.emplace_back(Point(x + quarter_period + d1_half, hex_height - chamfer_height));   // P2
@@ -3368,9 +3377,7 @@ bool FillRectilinear::fill_surface_trapezoidal(
         for (auto& p : star_row_mirrored.points)
             p.y() = hex_height - p.y();
 
-        size_t pair_idx              = 0;
         const coord_t global_x_shift = half_period;
-        const coord_t global_y_shift = tri_height;
         auto append_row_with_shift   = [&polylines](const Polyline& row_template, coord_t x_shift, coord_t y_shift) {
             Polyline row = row_template;
             for (Point& p : row.points) {
@@ -3381,10 +3388,11 @@ bool FillRectilinear::fill_surface_trapezoidal(
                 polylines.emplace_back(std::move(row));
         };
 
-        for (coord_t y = y_min_aligned; y < y_max_aligned; y += hex_height, ++pair_idx) {
-            const coord_t x_shift = (pair_idx % 2 == 0) ? 0 : half_period;
-            append_row_with_shift(star_row_normal, x_shift + global_x_shift, y + global_y_shift);
-            append_row_with_shift(star_row_mirrored, x_shift + global_x_shift, y + global_y_shift);
+        for (int64_t row = first_row; row <= last_row; ++row) {
+            const coord_t y = coord_t(row * hex_height) + row_y_offset;
+            const coord_t x_shift = (row % 2 == 0) ? 0 : half_period;
+            append_row_with_shift(star_row_normal, x_shift + global_x_shift, y);
+            append_row_with_shift(star_row_mirrored, x_shift + global_x_shift, y);
         }
 
         if (layer_mod)
@@ -3420,6 +3428,7 @@ bool FillRectilinear::fill_surface_trapezoidal(
 
         const int64_t n_min = int64_t(std::floor((cover.min.y() - y0) / h)) - 1;
         const int64_t n_max = int64_t(std::ceil((cover.max.y() - y0) / h)) + 1;
+        polylines.reserve(size_t(n_max - n_min + 1) * levels.size());
         for (int64_t n = n_min; n <= n_max; ++n) {
             const double  x_off = (n & 1) ? 0.5 * period : 0.;
             const double  base  = y0 + double(n) * h - tau;
