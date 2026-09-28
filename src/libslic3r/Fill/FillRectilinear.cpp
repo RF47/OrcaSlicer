@@ -3125,9 +3125,20 @@ bool FillRectilinear::fill_surface_trapezoidal(
         expolygon.rotate(-base_angle, rotate_vector.second);
     }
 
-    // Use extended object bounding box for consistent pattern across layers
-    BoundingBox bb = this->extended_object_bounding_box();
     const size_t infill_layer_id = (surface->thickness_layers > 0) ? this->layer_id / surface->thickness_layers : this->layer_id;
+    // The triangular family turns by 120 degrees every layer, about the origin of the frame it is built in.
+    const size_t layer_mod = infill_layer_id % 3;
+    const double angle     = layer_mod * 2.0 * M_PI / 3.0;
+
+    // Only build the rows over the surface, seen in the frame they are built in.
+    Polygon local = expolygon.contour;
+    if (Pattern_type != 0) {
+        local.translate(-rotate_vector.second.x(), -rotate_vector.second.y());
+        if (layer_mod)
+            local.rotate(-angle);
+    }
+    BoundingBox cover = get_extents(local);
+    cover.offset(period);
 
     switch (Pattern_type) {
     case 0: // Grid / Trapezoidal
@@ -3147,21 +3158,17 @@ bool FillRectilinear::fill_surface_trapezoidal(
         //  Align bounding box to the grid, phased through the box center so separated infills align
         //  each part on itself (grid_center is the origin for a standalone object / feature off).
         //  Captured before the merge, which grows bb and would otherwise shift its center.
+        BoundingBox bb = this->extended_object_bounding_box();
         const Point grid_center = bb.center();
         bb.merge(align_to_grid(bb.min, Point(period, period), grid_center));
         const coord_t xmin = bb.min.x();
         const coord_t ymin = bb.min.y();
 
-        BoundingBox cover = get_extents(expolygon);
-        if (infill_layer_id % 2 == 1) {
-            const coord_t cover_min_x = grid_center.x() + cover.min.y() - grid_center.y();
-            const coord_t cover_max_x = grid_center.x() + cover.max.y() - grid_center.y();
-            const coord_t cover_min_y = grid_center.y() + cover.min.x() - grid_center.x();
-            const coord_t cover_max_y = grid_center.y() + cover.max.x() - grid_center.x();
-            cover.min = Point(cover_min_x, cover_min_y);
-            cover.max = Point(cover_max_x, cover_max_y);
-        }
-        cover.offset(period);
+        auto transpose = [&grid_center](const Point &p) {
+            return Point(grid_center.x() + p.y() - grid_center.y(), grid_center.y() + p.x() - grid_center.x());
+        };
+        if (infill_layer_id % 2 == 1)
+            cover = BoundingBox(transpose(cover.min), transpose(cover.max));
         const coord_t row_spacing = period / 2;
         const coord_t first_x = xmin + (coord_t(std::floor(double(cover.min.x() - xmin) / period)) - 1) * period;
         const coord_t last_x  = xmin + (coord_t(std::ceil(double(cover.max.x() - xmin) / period)) + 1) * period;
@@ -3214,16 +3221,10 @@ bool FillRectilinear::fill_surface_trapezoidal(
         // Orca: mirror across the diagonal through grid_center (not the origin), so the swapped
         // layers stay aligned with the center-phased grid. For a standalone object / feature off,
         // grid_center is the origin and this is a plain x/y swap.
-        if (infill_layer_id % 2 == 1) {
-            for (Polyline& pl : polylines) {
-                for (Point& p : pl.points) {
-                    const coord_t dx = p.x() - grid_center.x();
-                    const coord_t dy = p.y() - grid_center.y();
-                    p.x() = grid_center.x() + dy;
-                    p.y() = grid_center.y() + dx;
-                }
-            }
-        }
+        if (infill_layer_id % 2 == 1)
+            for (Polyline& pl : polylines)
+                for (Point& p : pl.points)
+                    p = transpose(p);
         break;
     }
 
@@ -3243,15 +3244,6 @@ bool FillRectilinear::fill_surface_trapezoidal(
         // Triangular pattern density adjustment:
         const coord_t d2_tri = coord_t(2.0 / std::sqrt(3.0) * d1);
         const coord_t h      = coord_t(0.5 * std::sqrt(3.0) * period); // height of triangle
-
-        const size_t layer_mod = infill_layer_id % 3;
-        const double angle     = layer_mod * 2.0 * M_PI / 3.0;
-        ExPolygon local = expolygon;
-        local.translate(-rotate_vector.second.x(), -rotate_vector.second.y());
-        if (layer_mod)
-            local.rotate(-angle);
-        BoundingBox cover = get_extents(local);
-        cover.offset(period);
 
         // Keep the existing origin-anchored lattice, but generate only nearby tiles.
         const coord_t x_min_aligned = (coord_t(std::floor(double(cover.min.x()) / period)) - 1) * period;
@@ -3313,12 +3305,6 @@ bool FillRectilinear::fill_surface_trapezoidal(
 
             shift_row = !shift_row;
         }
-
-        //  Rotate around origin (0,0)
-        if (layer_mod)
-            for (auto& pl : polylines)
-                pl.rotate(angle, Point(0,0));
-
         break;
     }
 
@@ -3333,16 +3319,6 @@ bool FillRectilinear::fill_surface_trapezoidal(
         const coord_t half_period    = period / 2;
         const coord_t quarter_period = period / 4;
         const coord_t row_y_offset   = tri_height - (2 * tri_height) / 3;
-
-        const size_t layer_mod = infill_layer_id % 3;
-        const double angle     = layer_mod * 2.0 * M_PI / 3.0;
-
-        ExPolygon local = expolygon;
-        local.translate(-rotate_vector.second.x(), -rotate_vector.second.y());
-        if (layer_mod)
-            local.rotate(-angle);
-        BoundingBox cover = get_extents(local);
-        cover.offset(period);
 
         // Keep the lattice anchored at the origin while generating only tiles around this surface.
         const int64_t first_tile = int64_t(std::floor(double(cover.min.x()) / period)) - 1;
@@ -3391,11 +3367,6 @@ bool FillRectilinear::fill_surface_trapezoidal(
             append_row_with_shift(star_row_normal, x_shift + global_x_shift, y);
             append_row_with_shift(star_row_mirrored, x_shift + global_x_shift, y);
         }
-
-        if (layer_mod)
-            for (auto& pl : polylines)
-                pl.rotate(angle, Point(0, 0));
-
         break;
     }
 
@@ -3411,17 +3382,6 @@ bool FillRectilinear::fill_surface_trapezoidal(
         std::array<std::vector<Vec2d>, 2> levels{ cubic_upper_level(h - tau, h, period, d1), cubic_upper_level(tau, h, period, d1) };
         for (Vec2d &p : levels.front())
             p.y() = h - p.y();
-
-        const size_t layer_mod = infill_layer_id % 3;
-        const double angle     = layer_mod * 2.0 * M_PI / 3.0;
-
-        // Only cover the surface, seen in the frame the pattern is built in.
-        ExPolygon local = expolygon;
-        local.translate(-rotate_vector.second.x(), -rotate_vector.second.y());
-        if (layer_mod)
-            local.rotate(-angle);
-        BoundingBox cover = get_extents(local);
-        cover.offset(period);
 
         const int64_t n_min = int64_t(std::floor((cover.min.y() - y0) / h)) - 1;
         const int64_t n_max = int64_t(std::ceil((cover.max.y() - y0) / h)) + 1;
@@ -3441,11 +3401,6 @@ bool FillRectilinear::fill_surface_trapezoidal(
                 polylines.emplace_back(std::move(row));
             }
         }
-
-        if (layer_mod)
-            for (Polyline &pl : polylines)
-                pl.rotate(angle, Point(0, 0));
-
         break;
     }
 
@@ -3454,20 +3409,37 @@ bool FillRectilinear::fill_surface_trapezoidal(
         break;
     }
 
-    // Orca: cases 1 & 2 build the pattern symmetrically around the origin, so on their own they
-    // phase to the global origin and every part shares one grid. Shift the pattern onto the box
-    // center this->bounding_box carries, so separated infills align each part on itself. The center
-    // is the origin for a standalone object (or when the feature is off), making this a no-op there.
+    // Orca: cases 1 to 3 anchor the pattern at the origin, so on their own they phase to the global
+    // origin and every part shares one grid. Shift the pattern onto the box center
+    // this->bounding_box carries, so separated infills align each part on itself. The center is the
+    // origin for a standalone object (or when the feature is off), making the shift a no-op there.
     if (Pattern_type != 0)
-        for (Polyline &pl : polylines)
+        for (Polyline &pl : polylines) {
+            if (layer_mod)
+                pl.rotate(angle, Point(0, 0));
             pl.translate(rotate_vector.second);
+        }
 
     // Orca: round the corners of the trapezoids. The straight base lines of the triangular family
     // have no corner to round.
     smooth_polylines_corners(polylines, params.smooth_factor, scaled<double>(params.resolution));
 
+    // Only the centerlines within d1 / 2 of the surface have outlines reaching it.
+    polylines = intersection_pl(std::move(polylines), offset(expolygon, float(d1 / 2)));
+
     // Apply multiline fill
     multiline_fill(polylines, params, spacing);
+
+    // Start each outline on the cap at the first end of its path, outside the surface, so clipping splits it only there.
+    const Vec2d row_dir = Pattern_type != 0 ? Vec2d(std::cos(angle), std::sin(angle)) : infill_layer_id % 2 ? Vec2d::UnitY() : Vec2d::UnitX();
+    for (Polyline &pl : polylines)
+        if (pl.size() > 3 && pl.first_point() == pl.last_point()) {
+            pl.points.pop_back();
+            std::rotate(pl.points.begin(), std::min_element(pl.points.begin(), pl.points.end(), [&row_dir](const Point &a, const Point &b) {
+                return row_dir.dot(a.cast<double>()) < row_dir.dot(b.cast<double>());
+            }), pl.points.end());
+            pl.points.emplace_back(pl.points.front());
+        }
 
     // Contract surface polygon by half line width to avoid excesive overlap with perimeter
     ExPolygons contracted = offset_ex(expolygon, -float(scale_(0.5 * this->spacing)));
