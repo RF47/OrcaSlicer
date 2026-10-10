@@ -4037,8 +4037,14 @@ void TabPrintPlate::on_value_change(const std::string& opt_key, const boost::any
 
 void TabPrintPlate::notify_changed(ObjectBase* object)
 {
-    auto plate = dynamic_cast<PartPlate*>(object);
-    auto objects_list = wxGetApp().obj_list();
+    auto* objects_list = wxGetApp().obj_list();
+    if (objects_list == nullptr)
+        return;
+
+    auto* model = objects_list->GetModel();
+    if (model == nullptr)
+        return;
+
     wxDataViewItemArray items;
     objects_list->GetSelections(items);
     for (auto item : items) {
