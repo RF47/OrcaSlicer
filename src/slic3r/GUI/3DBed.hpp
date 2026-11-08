@@ -55,6 +55,7 @@ public:
     // ORCA make bed colors accessable for 2D bed
     static ColorRGBA DEFAULT_MODEL_COLOR;
     static ColorRGBA DEFAULT_MODEL_COLOR_DARK;
+    static ColorRGBA DEFAULT_MODEL_COLOR_OLED;
     static ColorRGBA DEFAULT_SOLID_GRID_COLOR;
     static ColorRGBA DEFAULT_TRANSPARENT_GRID_COLOR;
 
@@ -126,6 +127,7 @@ private:
     std::vector<std::vector<Vec2d>> m_extruder_shapes;
     std::vector<double> m_extruder_heights;
     bool m_is_dark = false;
+    bool m_is_oled = false;
 
 public:
     Bed3D() = default;
@@ -170,6 +172,8 @@ public:
     void on_change_color_mode(bool is_dark);
 
 private:
+    ColorRGBA model_color() const { return m_is_oled ? DEFAULT_MODEL_COLOR_OLED : m_is_dark ? DEFAULT_MODEL_COLOR_DARK : DEFAULT_MODEL_COLOR; }
+
     //BBS: add partplate related logic
     // Calculate an extended bounding box from axes and current model for visualization purposes.
     BoundingBoxf3 calc_printable_bounding_box() const;

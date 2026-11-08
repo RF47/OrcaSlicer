@@ -325,6 +325,9 @@ public:
     static ColorRGBA SELECT_COLOR;
     static ColorRGBA UNSELECT_COLOR;
     static ColorRGBA UNSELECT_DARK_COLOR;
+    // Black OLED mode
+    static ColorRGBA SELECT_OLED_COLOR;
+    static ColorRGBA UNSELECT_OLED_COLOR;
     static ColorRGBA DEFAULT_COLOR;
     static ColorRGBA LINE_BOTTOM_COLOR;
     static ColorRGBA LINE_TOP_COLOR;
@@ -845,6 +848,7 @@ class PartPlateList : public ObjectBase
     std::string m_hover_tooltip;
 
     bool m_is_dark = false;
+    bool m_is_oled = false;
     bool m_icon_textures_dark = false;
 
     int m_filament_count = 1;
@@ -1068,7 +1072,7 @@ public:
     void postprocess_arrange_polygon(arrangement::ArrangePolygon& arrange_polygon, bool selected);
 
     /*rendering related functions*/
-    void on_change_color_mode(bool is_dark) { m_is_dark = is_dark; }
+    void on_change_color_mode(bool is_dark);
     void render(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_current = false, bool only_body = false, int hover_id = -1, bool render_cali = false, bool show_grid = true, bool hide_chrome = false, bool hide_inactive = false);
     void set_render_option(bool bedtype_texture, bool plate_settings);
     void set_render_cali(bool value = true) { render_cali_logo = value; }

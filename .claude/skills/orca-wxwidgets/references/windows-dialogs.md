@@ -720,7 +720,8 @@ hide-on-close and reused (§2 shapes).
 `template<class P> class DPIAware : public P, public wxInspector::wxInspectable` (`GUI_Utils.hpp`);
 `typedef DPIAware<wxFrame> DPIFrame;` `class DPIDialog : public DPIAware<wxDialog>`. New Orca dialogs and
 frames derive one of them. Public API: `scale_factor()`, `prev_scale_factor()`, `em_unit()`,
-`normal_font()`, `enable_force_rescale()`; on Windows `force_color_changed()`. Subclasses implement the pure
+`normal_font()`, `enable_force_rescale()`, `force_color_changed()` (runs `on_sys_color_changed()` for an app-side
+theme change, which no wx event reports). Subclasses implement the pure
 virtual `on_dpi_changed(const wxRect&)` and may override `on_sys_color_changed()`.
 
 **What the constructor does** (one-step construction only; signature

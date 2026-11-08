@@ -403,6 +403,8 @@ public:
     static const ImVec4 COL_WINDOW_BG_DARK;
     static const ImVec4 COL_TOOLBAR_BG;
     static const ImVec4 COL_TOOLBAR_BG_DARK;
+    // Black OLED mode: canvas panels and toolbars
+    static const ImVec4 COL_BG_OLED;
     static const ImVec4 COL_SEPARATOR;
     static const ImVec4 COL_SEPARATOR_DARK;
     static const ImVec4 COL_ORCA;

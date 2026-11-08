@@ -242,6 +242,13 @@ BackgroundTexture::Metadata::Metadata()
 {
 }
 
+std::string BackgroundTexture::filename_for(bool is_dark)
+{
+    if (!is_dark)
+        return "toolbar_background.png";
+    return GUI_App::oled_mode() ? "toolbar_background_oled.png" : "toolbar_background_dark.png";
+}
+
 const float GLToolbar::Default_Icons_Size = 40.0f;
 
 GLToolbar::Layout::Layout()

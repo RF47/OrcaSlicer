@@ -4572,6 +4572,11 @@ bool GUI_App::dark_mode()
 #endif
 }
 
+bool GUI_App::oled_mode()
+{
+    return dark_mode() && wxGetApp().app_config->get_bool("dark_mode_oled");
+}
+
 const wxColour GUI_App::get_label_default_clr_system()
 {
     return dark_mode() ? wxColour(115, 220, 103) : wxColour(26, 132, 57);
@@ -4585,13 +4590,15 @@ const wxColour GUI_App::get_label_default_clr_modified()
 void GUI_App::init_label_colours()
 {
     bool is_dark_mode = dark_mode();
+    StateColor::SetDarkMode(is_dark_mode);
+    StateColor::SetOledMode(oled_mode());
     m_color_label_modified = is_dark_mode ? wxColour("#F1754E") : wxColour("#F1754E");
     m_color_label_sys      = is_dark_mode ? wxColour("#B2B3B5") : wxColour("#363636");
 
 #if defined(_WIN32) || defined(__linux__) || defined(__APPLE__)
     m_color_label_default           = is_dark_mode ? wxColour(250, 250, 250) : m_color_label_sys; // wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
     m_color_highlight_label_default = is_dark_mode ? wxColour(230, 230, 230): wxSystemSettings::GetColour(/*wxSYS_COLOUR_HIGHLIGHTTEXT*/wxSYS_COLOUR_WINDOWTEXT);
-    m_color_highlight_default       = is_dark_mode ? wxColour("#36363B") : wxColour("#F1F1F1"); // ORCA row highlighting
+    m_color_highlight_default       = StateColor::darkModeColorFor(wxColour("#F1F1F1")); // ORCA row highlighting
     m_color_hovered_btn_label       = is_dark_mode ? wxColour(255, 255, 254) : wxColour(0,0,0);
     m_color_default_btn_label       = is_dark_mode ? wxColour(255, 255, 254): wxColour(0,0,0);
     m_color_selected_btn_bg         = is_dark_mode ? wxColour(84, 84, 91)   : wxColour(206, 206, 206);
@@ -4599,7 +4606,6 @@ void GUI_App::init_label_colours()
     m_color_label_default = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
 #endif
     m_color_window_default          = is_dark_mode ? wxColour(43, 43, 43)   : wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOW);
-    StateColor::SetDarkMode(is_dark_mode);
 }
 
 void GUI_App::update_label_colours_from_appconfig()

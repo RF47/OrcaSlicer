@@ -35,6 +35,8 @@ public:
     static double LAB_Delta_E(const wxColour& c1, const wxColour& c2);
 
     static void SetDarkMode(bool dark);
+    // Black OLED mode: in dark mode, map the dark grey background surfaces to black
+    static void SetOledMode(bool oled);
 
     static std::map<wxColour, wxColour> const & GetDarkMap();
     static wxColour darkModeColorFor(wxColour const &color);

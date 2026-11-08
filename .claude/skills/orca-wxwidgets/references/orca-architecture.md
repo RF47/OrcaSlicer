@@ -853,8 +853,8 @@ created in display order; an empty tooltip is filled from the title.
   after it closes: canvas focus, reloading the print when sequence options changed, file associations
   on Windows, redraw when a render setting changed, a pending language switch (`load_language`,
   `ActionRegistry::relocalize_builtins`, `recreate_GUI`).
-- The Windows-only dark-mode row (`create_item_darkmode`) is described in
-  `references/colours-dark-mode.md`.
+- The Windows-only dark-mode row (`create_item_darkmode`) and the Black OLED mode row (`dark_mode_oled`, all
+  platforms) are described in `references/colours-dark-mode.md`.
 
 ```cpp
 // PreferencesDialog::create_items — a checkbox row bound to an app_config key

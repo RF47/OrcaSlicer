@@ -1083,6 +1083,8 @@ wxBoxSizer* PreferencesDialog::create_item_darkmode(wxString title,wxString tool
         app_config->set(param, checkbox->GetValue() ? "1" : "0");
         app_config->save();
         wxGetApp().Update_dark_mode_flag();
+        if (m_oled_mode_checkbox)
+            m_oled_mode_checkbox->Enable(checkbox->GetValue());
 
         //dark mode
 #ifdef _MSW_DARK_MODE
@@ -1124,6 +1126,10 @@ wxBoxSizer *PreferencesDialog::create_item_checkbox(wxString title, wxString too
 
     if (param == "sync_user_preset") { m_sync_user_preset_checkbox = checkbox; }
     if (param == SETTING_OPENGL_SKIP_IDENTICAL_FRAMES) { m_skip_identical_frames_checkbox = checkbox; }
+    if (param == "dark_mode_oled") {
+        m_oled_mode_checkbox = checkbox;
+        checkbox->Enable(wxGetApp().dark_mode());
+    }
 
     m_sizer->Add(checkbox, 0, wxALIGN_CENTER);
 
@@ -1152,6 +1158,17 @@ wxBoxSizer *PreferencesDialog::create_item_checkbox(wxString title, wxString too
         }
         else if (param == SETTING_OPENGL_SCENE_CACHE) {
             if (m_skip_identical_frames_checkbox) m_skip_identical_frames_checkbox->Enable(checkbox->GetValue());
+        }
+        else if (param == "dark_mode_oled") {
+            // Re-colour the open windows the way a dark mode switch does
+#ifdef __WINDOWS__
+            wxGetApp().force_colors_update();
+            wxGetApp().update_ui_from_settings(); // runs MainFrame::on_sys_color_changed(), then walks the main frame
+            set_dark_mode();
+#else
+            wxGetApp().mainframe->force_color_changed(); // as on a system theme switch, which also walks the main frame
+#endif
+            wxPostEvent(wxGetApp().plater(), SimpleEvent(EVT_GLCANVAS_COLOR_MODE_CHANGED));
         }
         else if (param == SETTING_OPENGL_OUTLINE_PERSISTENT) {
             if (m_persistent_outline_color_button) m_persistent_outline_color_button->Enable(checkbox->GetValue());
@@ -1709,6 +1726,13 @@ void PreferencesDialog::on_dpi_changed(const wxRect &suggested_rect) {
     Refresh();
 }
 
+// macOS / Linux: dark mode follows the system, which can switch while the dialog is open
+void PreferencesDialog::on_sys_color_changed()
+{
+    if (m_oled_mode_checkbox)
+        m_oled_mode_checkbox->Enable(wxGetApp().dark_mode());
+}
+
 void PreferencesDialog::Split(const std::string &src, const std::string &separator, std::vector<wxString> &dest)
 {
     std::string            str = src;
@@ -1767,6 +1791,9 @@ void PreferencesDialog::create_items()
     auto item_darkmode         = create_item_darkmode(_L("Enable dark Mode"), "", "dark_color_mode");
     g_sizer->Add(item_darkmode);
 #endif
+
+    auto item_oled_mode        = create_item_checkbox(_L("Black OLED mode"), _L("Use black instead of dark grey backgrounds, which suits OLED screens. Only applies when dark mode is enabled."), "dark_mode_oled");
+    g_sizer->Add(item_oled_mode);
 
     auto item_single_instance  = create_item_checkbox(_L("Allow only one OrcaSlicer instance"),
     #if __APPLE__

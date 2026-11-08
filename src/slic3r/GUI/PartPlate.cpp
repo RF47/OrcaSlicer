@@ -158,6 +158,8 @@ class Bed3D;
 ColorRGBA PartPlate::SELECT_COLOR		= { 0.2666f, 0.2784f, 0.2784f, 1.0f }; //{ 0.4196f, 0.4235f, 0.4235f, 1.0f };
 ColorRGBA PartPlate::UNSELECT_COLOR		= { 0.82f, 0.82f, 0.82f, 1.0f };
 ColorRGBA PartPlate::UNSELECT_DARK_COLOR		= { 0.384f, 0.384f, 0.412f, 1.0f };
+ColorRGBA PartPlate::SELECT_OLED_COLOR		= { 0.0f, 0.0f, 0.0f, 1.0f };
+ColorRGBA PartPlate::UNSELECT_OLED_COLOR	= { 0.12f, 0.12f, 0.13f, 1.0f }; // lifted off black so the selected plate stands out
 ColorRGBA PartPlate::DEFAULT_COLOR		= { 0.5f, 0.5f, 0.5f, 1.0f };
 ColorRGBA PartPlate::LINE_TOP_COLOR		= { 0.89f, 0.89f, 0.89f, 1.0f };
 ColorRGBA PartPlate::LINE_TOP_DARK_COLOR		= { 0.431f, 0.431f, 0.463f, 1.0f };
@@ -1798,10 +1800,11 @@ void PartPlate::render_background(bool force_default_color)
 	ColorRGBA color;
 	if (!force_default_color) {
 		if (m_selected) {
-            color = PartPlate::SELECT_COLOR;
+            color = m_partplate_list->m_is_oled ? PartPlate::SELECT_OLED_COLOR : PartPlate::SELECT_COLOR;
 		}
 		else {
-            color = m_partplate_list->m_is_dark ? PartPlate::UNSELECT_DARK_COLOR : PartPlate::UNSELECT_COLOR;
+            color = m_partplate_list->m_is_oled ? PartPlate::UNSELECT_OLED_COLOR :
+                    m_partplate_list->m_is_dark ? PartPlate::UNSELECT_DARK_COLOR : PartPlate::UNSELECT_COLOR;
 		}
 	}
 	else {
@@ -7877,6 +7880,12 @@ void PartPlateList::postprocess_arrange_polygon(arrangement::ArrangePolygon& arr
 }
 
 /*rendering related functions*/
+void PartPlateList::on_change_color_mode(bool is_dark)
+{
+    m_is_dark = is_dark;
+    m_is_oled = is_dark && GUI_App::oled_mode();
+}
+
 //render
 void PartPlateList::render(const Transform3d& view_matrix, const Transform3d& projection_matrix, bool bottom, bool only_current, bool only_body, int hover_id, bool render_cali, bool show_grid, bool hide_chrome, bool hide_inactive)
 {

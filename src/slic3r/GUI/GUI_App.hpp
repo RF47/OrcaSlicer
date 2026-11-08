@@ -491,6 +491,8 @@ public:
     void            open_orca_cloud(const std::string& next = std::string());
     static unsigned get_colour_approx_luma(const wxColour& colour);
     static bool     dark_mode();
+    // Black OLED mode: dark mode with black instead of dark grey backgrounds. Off whenever dark mode is off.
+    static bool     oled_mode();
     const wxColour  get_label_default_clr_system();
     const wxColour  get_label_default_clr_modified();
     void            init_label_colours();

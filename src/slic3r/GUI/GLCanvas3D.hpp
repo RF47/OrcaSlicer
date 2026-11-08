@@ -639,6 +639,7 @@ public:
 
 private:
     bool m_is_dark = false;
+    bool m_is_oled = false;
     wxGLCanvas* m_canvas;
     wxGLContext* m_context;
     SceneRaycaster m_scene_raycaster;

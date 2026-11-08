@@ -56,6 +56,21 @@ static std::map<wxColour, wxColour> gDarkColors{
     {"#E5F0EE", "#283232"}, // rgb(229, 240, 238)  Combo / Dropdown focused background color > ORCA color with %10 opacity
 };
 
+static bool gOledMode = false;
+
+// Black OLED mode: dark background surface -> black surface. Keyed by the dark colour, so a colour a dark walk already
+// applied to a window maps too, and a live OLED switch re-targets it. Each target must be unique: not a gDarkColors key,
+// or a second dark walk maps it again (#000000 is the key of black text and would turn white), and not a gDarkColors
+// value or another target, so lightModeColorFor can map it back.
+static std::map<wxColour, wxColour> gOledColors{
+    {"#2D2D31", "#000001"}, // Window background
+    {"#2D2D30", "#000002"}, // Main tab bar bg color
+    {"#242428", "#000003"}, // Side Tabbar bg
+    {"#36363C", "#1A1A1F"}, // Sidebar > Titlebar > Gradient Top | Elevated surface
+    {"#36363B", "#1A1A1E"}, // Sidebar > Titlebar > Gradient Bottom | Row highlighting
+    {"#36363D", "#1A1A20"},
+};
+
 std::tuple<double, double, double> StateColor::GetLAB(const wxColour& color) {
     // Convert color to RGB color space
     double r = color.Red() / 255.0;
@@ -192,14 +207,7 @@ std::map<wxColour, wxColour> const & StateColor::GetDarkMap()
 
 void StateColor::SetDarkMode(bool dark) { gDarkMode = dark; }
 
-inline wxColour darkModeColorFor2(wxColour const &color)
-{
-    if (!gDarkMode)
-        return color;
-    auto iter = gDarkColors.find(color);
-    if (iter != gDarkColors.end()) return iter->second;
-    return color;
-}
+void StateColor::SetOledMode(bool oled) { gOledMode = oled; }
 
 std::map<wxColour, wxColour> revert(std::map<wxColour, wxColour> const & map)
 {
@@ -208,12 +216,31 @@ std::map<wxColour, wxColour> revert(std::map<wxColour, wxColour> const & map)
     return map2;
 }
 
+static wxColour find_or_self(std::map<wxColour, wxColour> const &map, wxColour const &color)
+{
+    auto iter = map.find(color);
+    return iter != map.end() ? iter->second : color;
+}
+
+// Black OLED surface -> dark grey surface
+static wxColour greyColorFor(wxColour const &color)
+{
+    static std::map<wxColour, wxColour> gGreyColors = revert(gOledColors);
+    return find_or_self(gGreyColors, color);
+}
+
+inline wxColour darkModeColorFor2(wxColour const &color)
+{
+    if (!gDarkMode)
+        return color;
+    wxColour dark = find_or_self(gDarkColors, color);
+    return gOledMode ? find_or_self(gOledColors, dark) : greyColorFor(dark);
+}
+
 wxColour StateColor::lightModeColorFor(wxColour const &color)
 {
     static std::map<wxColour, wxColour> gLightColors = revert(gDarkColors);
-    auto iter = gLightColors.find(color);
-    if (iter != gLightColors.end()) return iter->second;
-    return color;
+    return find_or_self(gLightColors, greyColorFor(color));
 }
 
 wxColour StateColor::darkModeColorFor(wxColour const &color) { return darkModeColorFor2(color); }

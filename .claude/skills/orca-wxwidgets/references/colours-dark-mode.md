@@ -54,6 +54,9 @@ Contents: [Rules](#rules) · [wxColour](#wxcolour) · [System colours and appear
     use Orca `Button` + `SetStyle()`. → [Window colours](#window-colours-inheritance-and-native-control-limits)
 17. Re-apply text-control colours after every `Enable()` (macOS resets them). → [Window colours](#window-colours-inheritance-and-native-control-limits)
 18. Windows menu bitmaps follow wx's menu state (`check_dark_mode()`), not `dark_mode()`. → [Icons](#dark-mode-icons)
+19. Derive a background from its light palette key (`darkModeColorFor("#FFFFFF")`), never hard-code its dark grey
+    (`#2D2D31`): Black OLED mode re-targets the dark surfaces only through `StateColor`. Where a surface cannot go
+    through the map (a GL clear colour, a colour that is a text key), branch on `wxGetApp().oled_mode()`. → [StateColor](#statecolor)
 
 ## wxColour
 
@@ -451,9 +454,16 @@ time.
   `#6B6B6B→#818183`, `#ACACAC→#65656A`, `#363636→#B2B3B5`, `#F0F0F1→#333337`. Near-white variants (`#FFFFFE` as the
   twin of `#000000`, `#FEFFFF`, `#FFFEFE`) exist so the reverse map stays usable. `#F0F0F0`, `#333333`, `#5C5C5C`
   are not keys.
-- Static helpers: `SetDarkMode`, `darkModeColorFor` (returns its input unless `gDarkMode` is set), `lightModeColorFor`
-  (the reverse map, built once with `emplace` so the smallest `GetRGBA()` key wins; not gated by `gDarkMode` — it
-  maps in either mode), `GetDarkMap()`, LAB math
+- **Black OLED layer** (`gOledColors`, on while StateColor's `gOledMode` is set): a second map keyed by the *dark*
+  colour, from the dark grey surfaces (`#2D2D31` window, `#2D2D30` tab bar, `#242428` side tab bar, `#36363B/C/D`
+  elevated surfaces) to near-black. `darkModeColorFor` applies it after `gDarkColors`, also to a colour that is
+  already a dark surface, so a dark walk re-targets windows walked before a live OLED switch; with the layer off it
+  maps a target back to its grey. Each target is unique: not a `gDarkColors` key (a second dark walk would map it
+  again — `#000000` is the key of black text and would turn `#FFFFFE`), not a `gDarkColors` value, not another
+  target. Buttons, borders, separators and text keep their dark colours.
+- Static helpers: `SetDarkMode`, `SetOledMode`, `darkModeColorFor` (returns its input unless `gDarkMode` is set),
+  `lightModeColorFor` (the reverse map, built once with `emplace` so the smallest `GetRGBA()` key wins, after mapping
+  an OLED target back to its grey; not gated by `gDarkMode` — it maps in either mode), `GetDarkMap()`, LAB math
   `GetLAB`, `GetLightness`, `SetLightness`, `LightenDarkenColor`, `GetColorDifference`/`LAB_Delta_E`.
 
 **Reverse-map and chaining hazards** (exact consequences of the table):
@@ -512,6 +522,8 @@ entries are not keys — always call `SetStyle()`.
 | app_config `dark_color_mode` ("1"/"0") | Windows: the Preferences checkbox (`PreferencesDialog::create_item_darkmode`, `#ifdef _WIN32`); `AppConfig::set_defaults` sets `"0"` when empty (`#ifdef _WIN32`). macOS/Linux: overwritten from `GetAppearance().IsDark()` at startup (`GUI_App::on_init_inner`, `#ifndef __WINDOWS__`) and by `update_dark_config()` on every SYS_COLOUR event. | `GUI_App::dark_mode()` (non-macOS); `Plater::priv::on_change_color_mode` and other GL/web code that reads the key directly — new code calls `dark_mode()` instead |
 | `GUI_App::m_is_dark_mode` | `GUI_App::Update_dark_mode_flag()` (= `dark_mode()`) | `GUI_App::UpdateDarkUI` (the walk) only |
 | `StateColor` file-static `gDarkMode` | `StateColor::SetDarkMode`, called only from `GUI_App::init_label_colours()` | `darkModeColorFor`, `colorForStates` |
+| app_config `dark_mode_oled` (bool) | the Preferences "Black OLED mode" checkbox (all platforms, enabled while `dark_mode()`); unset = off | `GUI_App::oled_mode()` = `dark_mode() &&` the key |
+| `StateColor` file-static `gOledMode` | `StateColor::SetOledMode(oled_mode())`, called only from `GUI_App::init_label_colours()` | `darkModeColorFor`, `colorForStates` |
 | NppDarkMode `g_darkModeEnabled` (Windows) | `NppDarkMode::InitDarkMode` / `SetDarkMode` | title bars, explorer theme, scrollbars, DVC header |
 | wx's own MSW mode | `MSWEnableDarkMode(DarkMode_Auto)` → follows the **system app mode** | wx internals, `IsDark()`, `GetColour()` |
 
@@ -529,8 +541,15 @@ entries are not keys — always call `SetStyle()`.
 3.3 migration: off MSW the three are identical (`src/common/settcmn.cpp:71-84`), and on MSW it is reached only for an
 unset key and for Windows menu bitmaps, where matching wx's own menu state is the point.
 
-There is **no "follow system" setting and no in-app override on macOS/Linux**: the app mirrors the OS and re-syncs
-the config on each SYS_COLOUR event. `SUPPORT_DARK_MODE` is defined unconditionally in `libslic3r/AppConfig.hpp`, and
+There is **no "follow system" setting and no in-app dark mode override on macOS/Linux**: the app mirrors the OS and
+re-syncs the config on each SYS_COLOUR event. Black OLED mode is the one in-app option there; it applies on top of
+the system's dark mode. Surfaces outside `StateColor` follow `oled_mode()` themselves: the Windows/Linux top bar
+(`BBLTopbar.cpp` `topbar_bg_colour`) and, in the 3D view, what is drawn over the background, which keeps its dark
+grey: the bed model and plates (`Bed3D::model_color`, `PartPlate::SELECT_OLED_COLOR`/`UNSELECT_OLED_COLOR`), the view
+cube, the GL toolbars (`BackgroundTexture::filename_for` → `toolbar_background_oled.png`), the idle canvas buttons
+(`canvas_*_oled.svg`) and the ImGui toolbar, menu, combo and gizmo windows (`ImGuiWrapper::COL_BG_OLED`). GL classes
+cache it as `is_dark && GUI_App::oled_mode()` in their `on_change_color_mode(is_dark)`. Web pages keep the dark grey
+theme. `SUPPORT_DARK_MODE` is defined unconditionally in `libslic3r/AppConfig.hpp`, and
 `_MSW_DARK_MODE` is defined to 1 on every platform in `GUI_App.hpp` — neither is a platform gate. Windows-only code
 sits under `__WINDOWS__`/`_WIN32` (NppDarkMode sources are added only `if (WIN32)` in `src/slic3r/CMakeLists.txt`).
 The other theme-dependent `GUI_App` colours (`m_color_label_modified`, `m_color_label_sys` `#363636`/`#B2B3B5`,
@@ -663,7 +682,7 @@ Startup (GUI_App::on_init_inner): init_label_colours() [StateColor::SetDarkMode]
   → (Windows) MSWEnableDarkMode(DarkMode_Auto); NppDarkMode::InitDarkMode(dark_mode(), sys_menu)
   MainFrame ctor ends with UpdateDarkUIWin(this)
 
-Windows — Preferences "Enable dark Mode" (PreferencesDialog::create_item_darkmode, the only toggle):
+Windows — Preferences "Enable dark Mode" (PreferencesDialog::create_item_darkmode, the only dark mode toggle):
   1 set + save dark_color_mode   2 Update_dark_mode_flag()
   3 force_colors_update(): NppDarkMode::SetDarkMode(dark_mode()), SetDarkTitleBar(mainframe), m_force_colors_update
   4 update_ui_from_settings():
@@ -672,6 +691,11 @@ Windows — Preferences "Enable dark Mode" (PreferencesDialog::create_item_darkm
        update_dark_children_ui(mainframe)            (all platforms when m_force_colors_update)
   5 PreferencesDialog::set_dark_mode() → UpdateDlgDarkUI(this)
   6 wxPostEvent(plater, EVT_GLCANVAS_COLOR_MODE_CHANGED) → Plater::priv::on_change_color_mode (GL canvases, sidebar)
+
+Preferences "Black OLED mode" (dark_mode_oled), all platforms; dark mode stays on:
+  Windows: force_colors_update() → update_ui_from_settings() → set_dark_mode()   (steps 3-5 above)
+  macOS / Linux: mainframe->force_color_changed() → MainFrame::on_sys_color_changed() (as a system switch, below)
+  then wxPostEvent(plater, EVT_GLCANVAS_COLOR_MODE_CHANGED)
 
 macOS / Linux — system switch: wxEVT_SYS_COLOUR_CHANGED at every DPIAware TLW (order undefined)
   → update_dark_config() [config + m_is_dark_mode] → on_sys_color_changed() → Skip()

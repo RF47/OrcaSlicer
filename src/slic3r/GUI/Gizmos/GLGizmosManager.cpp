@@ -151,7 +151,7 @@ GLGizmosManager::EType GLGizmosManager::get_gizmo_from_mouse(const Vec2d &mouse_
 
 void GLGizmosManager::switch_gizmos_icon_filename()
 {
-    m_background_texture.metadata.filename = m_is_dark ? "toolbar_background_dark.png" : "toolbar_background.png";
+    m_background_texture.metadata.filename = BackgroundTexture::filename_for(m_is_dark);
     m_background_texture.metadata.left = 16;
     m_background_texture.metadata.top = 16;
     m_background_texture.metadata.right = 16;
@@ -223,7 +223,7 @@ bool GLGizmosManager::init()
         return true;
     init_icon_textures();
 
-    m_background_texture.metadata.filename = m_is_dark ? "toolbar_background_dark.png" : "toolbar_background.png";
+    m_background_texture.metadata.filename = BackgroundTexture::filename_for(m_is_dark);
     m_background_texture.metadata.left = 16;
     m_background_texture.metadata.top = 16;
     m_background_texture.metadata.right = 16;
@@ -363,6 +363,7 @@ bool GLGizmosManager::init_icon_textures()
         return false;
 
     for (const auto& [icon, name] : std::initializer_list<std::pair<MENU_ICON_NAME, const char*>>{
+             { IC_CANVAS_MENU_OLED, "canvas_menu_oled" }, { IC_CANVAS_ZOOM_OLED, "canvas_zoom_oled" }, { IC_CANVAS_SECTION_OLED, "canvas_section_oled" },
              { IC_CANVAS_SECTION, "canvas_section" }, { IC_CANVAS_SECTION_HOVER, "canvas_section_hover" },
              { IC_CANVAS_SECTION_DARK, "canvas_section_dark" }, { IC_CANVAS_SECTION_DARK_HOVER, "canvas_section_dark_hover" },
              { IC_CANVAS_SECTION_ACTIVE, "canvas_section_active" }, { IC_CANVAS_SECTION_ACTIVE_HOVER, "canvas_section_active_hover" },

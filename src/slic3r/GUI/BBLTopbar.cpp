@@ -6,6 +6,7 @@
 #include <wx/event.h>
 #include <wx/dcbuffer.h>
 #include <wx/dc.h>
+#include <wx/colour.h>
 #include <wx/aui/auibar.h>
 #include "slic3r/GUI/Widgets/StateColor.hpp"
 #include <wx/settings.h>
@@ -43,6 +44,9 @@
 using namespace Slic3r;
 using namespace Slic3r::GUI;
 
+// The top bar is dark in both modes; Black OLED mode makes it black
+static wxColour topbar_bg_colour() { return GUI_App::oled_mode() ? *wxBLACK : wxColour(38, 46, 48); }
+
 enum CUSTOM_ID
 {
     ID_TOP_MENU_TOOL = 3100,
@@ -63,7 +67,7 @@ CenteredTitle::CenteredTitle(wxWindow* parent)
     Create(parent, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
     Bind(wxEVT_PAINT, [this](wxPaintEvent&) {
         wxBufferedPaintDC dc(this);
-        dc.SetBackground(wxBrush(wxColour(38, 46, 48)));
+        dc.SetBackground(wxBrush(topbar_bg_colour()));
         dc.Clear();
 
         dc.SetTextForeground(*wxWHITE);
@@ -119,7 +123,7 @@ public:
 
 void BBLTopbarArt::DrawBackground(wxDC& dc, wxWindow* wnd, const wxRect& rect)
 {
-    dc.SetBrush(wxBrush(wxColour(38, 46, 48)));
+    dc.SetBrush(wxBrush(topbar_bg_colour()));
     wxRect clipRect = rect;
     clipRect.y -= 8;
     clipRect.height += 8;

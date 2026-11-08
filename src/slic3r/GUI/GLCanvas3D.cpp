@@ -197,6 +197,11 @@ static Slic3r::ColorRGBA DEFAULT_BG_LIGHT_COLOR_DARK = { 0.329f, 0.329f, 0.353f,
 static Slic3r::ColorRGBA ERROR_BG_LIGHT_COLOR        = { 0.753f, 0.192f, 0.039f, 1.0f };
 static Slic3r::ColorRGBA ERROR_BG_LIGHT_COLOR_DARK   = { 0.753f, 0.192f, 0.039f, 1.0f };
 
+static ImVec4 toolbar_bg_color(bool is_dark, bool is_oled)
+{
+    return is_oled ? Slic3r::GUI::ImGuiWrapper::COL_BG_OLED : is_dark ? Slic3r::GUI::ImGuiWrapper::COL_TOOLBAR_BG_DARK : Slic3r::GUI::ImGuiWrapper::COL_TOOLBAR_BG;
+}
+
 void Slic3r::GUI::GLCanvas3D::update_render_colors()
 {
     DEFAULT_BG_LIGHT_COLOR = ImGuiWrapper::from_ImVec4(RenderColor::colors[RenderCol_3D_Background]);
@@ -1788,6 +1793,7 @@ bool GLCanvas3D::init()
 
 void GLCanvas3D::on_change_color_mode(bool is_dark, bool reinit) {
     m_is_dark = is_dark;
+    m_is_oled = is_dark && wxGetApp().oled_mode();
     // Bed color
     m_bed.on_change_color_mode(is_dark);
     // GcodeViewer color
@@ -6878,7 +6884,7 @@ void GLCanvas3D::_render_3d_navigator()
     style.Colors[ImGuizmo::COLOR::DIRECTION_Y] = ImGuiWrapper::to_ImVec4(ColorRGBA::Z());
     style.Colors[ImGuizmo::COLOR::DIRECTION_Z] = ImGuiWrapper::to_ImVec4(ColorRGBA::X());
     style.Colors[ImGuizmo::COLOR::TEXT] = m_is_dark ? ImVec4(224 / 255.f, 224 / 255.f, 224 / 255.f, 1.f) : ImVec4(.2f, .2f, .2f, 1.0f);
-    style.Colors[ImGuizmo::COLOR::FACE]        = m_is_dark ? ImVec4(0.23f, 0.23f, 0.23f, 1.f) : ImVec4(0.77f, 0.77f, 0.77f, 1);
+    style.Colors[ImGuizmo::COLOR::FACE]        = m_is_oled ? ImVec4(0.f, 0.f, 0.f, 1.f) : m_is_dark ? ImVec4(0.23f, 0.23f, 0.23f, 1.f) : ImVec4(0.77f, 0.77f, 0.77f, 1);
     strcpy(style.AxisLabels[ImGuizmo::Axis::Axis_X], _u8L_CONTEXT("Y", "Axis").c_str()); // ORCA use uppercase to match text on tranform widgets
     strcpy(style.AxisLabels[ImGuizmo::Axis::Axis_Y], _u8L_CONTEXT("Z", "Axis").c_str()); // ORCA use uppercase to match text on tranform widgets
     strcpy(style.AxisLabels[ImGuizmo::Axis::Axis_Z], _u8L_CONTEXT("X", "Axis").c_str()); // ORCA use uppercase to match text on tranform widgets
@@ -7483,7 +7489,7 @@ void GLCanvas3D::_update_slice_error_status()
 void GLCanvas3D::_switch_toolbars_icon_filename()
 {
     BackgroundTexture::Metadata background_data;
-    background_data.filename = m_is_dark ? "toolbar_background_dark.png" : "toolbar_background.png";
+    background_data.filename = BackgroundTexture::filename_for(m_is_dark);
     background_data.left = 16;
     background_data.top = 16;
     background_data.right = 16;
@@ -7570,7 +7576,7 @@ bool GLCanvas3D::_init_main_toolbar()
         return true;
 
     BackgroundTexture::Metadata background_data;
-    background_data.filename = m_is_dark ? "toolbar_background_dark.png" : "toolbar_background.png";
+    background_data.filename = BackgroundTexture::filename_for(m_is_dark);
     background_data.left = 16;
     background_data.top = 16;
     background_data.right = 16;
@@ -7810,7 +7816,7 @@ bool GLCanvas3D::_init_assemble_view_toolbar()
         return true;
 
     BackgroundTexture::Metadata background_data;
-    background_data.filename = m_is_dark ? "toolbar_background_dark.png" : "toolbar_background.png";
+    background_data.filename = BackgroundTexture::filename_for(m_is_dark);
     background_data.left = 16;
     background_data.top = 16;
     background_data.right = 16;
@@ -7867,7 +7873,7 @@ bool GLCanvas3D::_init_separator_toolbar()
         return true;
 
     BackgroundTexture::Metadata background_data;
-    background_data.filename = m_is_dark ? "toolbar_background_dark.png" : "toolbar_background.png";
+    background_data.filename = BackgroundTexture::filename_for(m_is_dark);
     background_data.left = 0;
     background_data.top = 0;
     background_data.right = 0;
@@ -7917,7 +7923,7 @@ bool GLCanvas3D::_init_collapse_toolbar()
 
     // Its owner laid it out; the background needs the GL context.
     BackgroundTexture::Metadata background_data;
-    background_data.filename = m_is_dark ? "toolbar_background_dark.png" : "toolbar_background.png";
+    background_data.filename = BackgroundTexture::filename_for(m_is_dark);
     background_data.left = 16;
     background_data.top = 16;
     background_data.right = 16;
@@ -11083,7 +11089,7 @@ void GLCanvas3D::_render_return_toolbar() const
 #endif
 
     ImVec4 fg_color = m_is_dark ? ImVec4(1.f, 1.f, 1.f, 0.88f) : ImVec4(50 / 255.f, 58 / 255.f, 61 / 255.f, 1.f);
-    ImVec4 bg_color = m_is_dark ? ImGuiWrapper::COL_TOOLBAR_BG_DARK : ImGuiWrapper::COL_TOOLBAR_BG;
+    ImVec4 bg_color = toolbar_bg_color(m_is_dark, m_is_oled);
     ImVec4 bg_color_hover = bg_color +  (m_is_dark ? ImVec4(.03f, .03f, .03f, 0) : ImVec4(-.02f, -.02f, -.02f, 0));
 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 18.0f);
@@ -11165,11 +11171,15 @@ void GLCanvas3D::_render_canvas_toolbar()
     imgui.begin(_L("Canvas Toolbar"), ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoMove |
                                            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollWithMouse);//
 
+    // Black OLED mode draws the idle buttons black; hovered and active ones keep their dark mode look.
+    using Icon = GLGizmosManager::MENU_ICON_NAME;
+    auto idle_icon = [this](Icon light, Icon dark, Icon oled) { return m_is_oled ? oled : m_is_dark ? dark : light; };
+
     // Section view, on top so its panel opens above the toolbar.
     const bool  section_view = is_section_view_active();
     ImTextureID s_normal_id  = m_gizmos.get_icon_texture_id(section_view ?
         (m_is_dark ? GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_SECTION_ACTIVE_DARK : GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_SECTION_ACTIVE) :
-        (m_is_dark ? GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_SECTION_DARK        : GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_SECTION));
+        idle_icon(Icon::IC_CANVAS_SECTION, Icon::IC_CANVAS_SECTION_DARK, Icon::IC_CANVAS_SECTION_OLED));
     ImTextureID s_hover_id   = m_gizmos.get_icon_texture_id(section_view ?
         (m_is_dark ? GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_SECTION_ACTIVE_DARK_HOVER : GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_SECTION_ACTIVE_HOVER) :
         (m_is_dark ? GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_SECTION_DARK_HOVER        : GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_SECTION_HOVER));
@@ -11189,7 +11199,7 @@ void GLCanvas3D::_render_canvas_toolbar()
 
     ImGui::Dummy({ 0, spacing.y});
 
-    ImTextureID m_normal_id = m_gizmos.get_icon_texture_id(m_is_dark ? GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_MENU_DARK       : GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_MENU);
+    ImTextureID m_normal_id = m_gizmos.get_icon_texture_id(idle_icon(Icon::IC_CANVAS_MENU, Icon::IC_CANVAS_MENU_DARK, Icon::IC_CANVAS_MENU_OLED));
     ImTextureID m_hover_id  = m_gizmos.get_icon_texture_id(m_is_dark ? GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_MENU_DARK_HOVER : GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_MENU_HOVER);
 
     if (ImGui::ImageButton3(m_normal_id, m_hover_id, btn_size)) {
@@ -11202,7 +11212,7 @@ void GLCanvas3D::_render_canvas_toolbar()
     if(zoom_btn){
         ImGui::Dummy({ 0, spacing.y});
 
-        ImTextureID z_normal_id = m_gizmos.get_icon_texture_id(m_is_dark ? GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_ZOOM_DARK       : GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_ZOOM);
+        ImTextureID z_normal_id = m_gizmos.get_icon_texture_id(idle_icon(Icon::IC_CANVAS_ZOOM, Icon::IC_CANVAS_ZOOM_DARK, Icon::IC_CANVAS_ZOOM_OLED));
         ImTextureID z_hover_id  = m_gizmos.get_icon_texture_id(m_is_dark ? GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_ZOOM_DARK_HOVER : GLGizmosManager::MENU_ICON_NAME::IC_CANVAS_ZOOM_HOVER);
 
         if (ImGui::ImageButton3(z_normal_id, z_hover_id, btn_size)) {
@@ -11237,7 +11247,7 @@ void GLCanvas3D::_render_canvas_toolbar()
 
     ImGui::PopStyleVar(4); // Window
 
-    ImGui::PushStyleColor(ImGuiCol_PopupBg           , m_is_dark ? ImGuiWrapper::COL_TOOLBAR_BG_DARK : ImGuiWrapper::COL_TOOLBAR_BG);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg           , toolbar_bg_color(m_is_dark, m_is_oled));
     ImGui::PushStyleColor(ImGuiCol_Separator         , m_is_dark ? ImVec4(1, 1, 1, .20f) : ImVec4(0, 0, 0, .2f));
     ImGui::PushStyleColor(ImGuiCol_Text              , m_is_dark ? ImVec4(1, 1, 1, .88f) : ImVec4(50 / 255.f, 58 / 255.f, 61 / 255.f, 1.f));
     ImGui::PushStyleColor(ImGuiCol_TextDisabled      , m_is_dark ? ImVec4(1, 1, 1, .44f) : ImVec4(50 / 255.f, 58 / 255.f, 61 / 255.f, .5f));
@@ -11412,7 +11422,7 @@ void GLCanvas3D::_render_section_view_panel(const ImVec2& bottom_left)
     const float   sc    = get_scale();
 
     ImGuiWrapper::push_toolbar_style(sc);
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, m_is_dark ? ImGuiWrapper::COL_TOOLBAR_BG_DARK : ImGuiWrapper::COL_TOOLBAR_BG);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, toolbar_bg_color(m_is_dark, m_is_oled));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.f * sc);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.f, 8.f) * sc);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.f, 4.f) * sc);
@@ -11598,7 +11608,7 @@ void GLCanvas3D::_render_paint_toolbar() const
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(spacing, spacing));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(spacing, 0));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, m_is_dark ? ImGuiWrapper::COL_TOOLBAR_BG_DARK : ImGuiWrapper::COL_TOOLBAR_BG); // ORCA Toolbar color
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, toolbar_bg_color(m_is_dark, m_is_oled)); // ORCA Toolbar color
 
     imgui.set_next_window_pos(0.5f * canvas_w, 0, ImGuiCond_Always, 0.5f, 0.0f);
     float constraint_window_width = canvas_w - 2 * return_button_margin;

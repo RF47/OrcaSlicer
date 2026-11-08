@@ -260,6 +260,9 @@ struct BackgroundTexture
         Metadata();
     };
 
+    // The background file for the colour mode; Black OLED mode draws the toolbars black
+    static std::string filename_for(bool is_dark);
+
     GLTexture texture;
     Metadata metadata;
 };

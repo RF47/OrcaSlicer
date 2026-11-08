@@ -237,13 +237,14 @@ public:
     const wxFont& normal_font() const   { return m_normal_font; }
     void enable_force_rescale()         { m_force_rescale = true; }
 
-#ifdef _WIN32
+    // Runs on_sys_color_changed() for an app-side theme change, which no wxEVT_SYS_COLOUR_CHANGED reports
     void force_color_changed()
     {
+#ifdef _WIN32
         update_dark_ui(this);
+#endif
         on_sys_color_changed();
     }
-#endif
 
     int ShowModal()
     {

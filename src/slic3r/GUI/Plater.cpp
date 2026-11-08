@@ -15130,7 +15130,7 @@ bool Plater::priv::init_collapse_toolbar()
         return true;
 
     BackgroundTexture::Metadata background_data;
-    background_data.filename = m_is_dark ? "toolbar_background_dark.png" : "toolbar_background.png";
+    background_data.filename = BackgroundTexture::filename_for(m_is_dark);
     background_data.left = 16;
     background_data.top = 16;
     background_data.right = 16;
